@@ -1,0 +1,178 @@
+[
+  {
+    "media": "image",
+    "case": "P1 short payload, derived location",
+    "expected": "Authentic",
+    "actual": "Authentic",
+    "match": "yes",
+    "note": "Signature verified against the loaded public key and the media hash matches the signed value. This file is intact and was issued by the holder of the corresponding private key."
+  },
+  {
+    "media": "image",
+    "case": "P2 large payload at 3 LSB",
+    "expected": "Authentic",
+    "actual": "Authentic",
+    "match": "yes",
+    "note": "Signature verified against the loaded public key and the media hash matches the signed value. This file is intact and was issued by the holder of the corresponding private key."
+  },
+  {
+    "media": "image",
+    "case": "P3 encrypted custom payload",
+    "expected": "Authentic",
+    "actual": "Authentic",
+    "match": "yes",
+    "note": "message recovered: True"
+  },
+  {
+    "media": "image",
+    "case": "N1 media edited after signing",
+    "expected": "Tampered",
+    "actual": "Tampered",
+    "match": "yes",
+    "note": "Brightened the image, leaving the low 2 bit(s) untouched"
+  },
+  {
+    "media": "image",
+    "case": "N2 verified with a different public key",
+    "expected": "Signature Invalid",
+    "actual": "Signature Invalid",
+    "match": "yes",
+    "note": "A payload was extracted, but its signature does not verify against the loaded public key. Either the payload was altered after signing, or it was signed by a different party."
+  },
+  {
+    "media": "image",
+    "case": "N3 embedded payload corrupted",
+    "expected": "Signature Invalid",
+    "actual": "Signature Invalid",
+    "match": "yes",
+    "note": "Randomised 64 carriers inside the signed payload"
+  },
+  {
+    "media": "image",
+    "case": "N4 unprotected cover object",
+    "expected": "Payload Missing",
+    "actual": "Payload Missing",
+    "match": "yes",
+    "note": "No container for this stego key was found anywhere in the file. Either nothing was embedded, the stego key is wrong, or the LSB depth does not match the one used at embedding."
+  },
+  {
+    "media": "image",
+    "case": "N5 wrong stego key",
+    "expected": "Payload Missing",
+    "actual": "Payload Missing",
+    "match": "yes",
+    "note": "No container for this stego key was found anywhere in the file. Either nothing was embedded, the stego key is wrong, or the LSB depth does not match the one used at embedding."
+  },
+  {
+    "media": "image",
+    "case": "N6 embedded manually, verified with derived offset",
+    "expected": "Wrong Start Location",
+    "actual": "Wrong Start Location",
+    "match": "yes",
+    "note": "embedded at carrier 50,000"
+  },
+  {
+    "media": "image",
+    "case": "N7 wrong LSB depth at verification",
+    "expected": "Payload Missing",
+    "actual": "Payload Missing",
+    "match": "yes",
+    "note": "No container for this stego key was found anywhere in the file. Either nothing was embedded, the stego key is wrong, or the LSB depth does not match the one used at embedding."
+  },
+  {
+    "media": "image",
+    "case": "N8 payload larger than capacity",
+    "expected": "refused",
+    "actual": "refused",
+    "match": "yes",
+    "note": "Payload needs 2,882,904 bits but this cover holds 1,440,000 at 1 LSB(s). Short by 1,442,904 bits."
+  },
+  {
+    "media": "audio",
+    "case": "P1 short payload, derived location",
+    "expected": "Authentic",
+    "actual": "Authentic",
+    "match": "yes",
+    "note": "Signature verified against the loaded public key and the media hash matches the signed value. This file is intact and was issued by the holder of the corresponding private key."
+  },
+  {
+    "media": "audio",
+    "case": "P2 large payload at 3 LSB",
+    "expected": "Authentic",
+    "actual": "Authentic",
+    "match": "yes",
+    "note": "Signature verified against the loaded public key and the media hash matches the signed value. This file is intact and was issued by the holder of the corresponding private key."
+  },
+  {
+    "media": "audio",
+    "case": "P3 encrypted custom payload",
+    "expected": "Authentic",
+    "actual": "Authentic",
+    "match": "yes",
+    "note": "message recovered: True"
+  },
+  {
+    "media": "audio",
+    "case": "N1 media edited after signing",
+    "expected": "Tampered",
+    "actual": "Tampered",
+    "match": "yes",
+    "note": "Shifted the audio level, leaving the low 2 bit(s) untouched"
+  },
+  {
+    "media": "audio",
+    "case": "N2 verified with a different public key",
+    "expected": "Signature Invalid",
+    "actual": "Signature Invalid",
+    "match": "yes",
+    "note": "A payload was extracted, but its signature does not verify against the loaded public key. Either the payload was altered after signing, or it was signed by a different party."
+  },
+  {
+    "media": "audio",
+    "case": "N3 embedded payload corrupted",
+    "expected": "Signature Invalid",
+    "actual": "Signature Invalid",
+    "match": "yes",
+    "note": "Randomised 64 carriers inside the signed payload"
+  },
+  {
+    "media": "audio",
+    "case": "N4 unprotected cover object",
+    "expected": "Payload Missing",
+    "actual": "Payload Missing",
+    "match": "yes",
+    "note": "No container for this stego key was found anywhere in the file. Either nothing was embedded, the stego key is wrong, or the LSB depth does not match the one used at embedding."
+  },
+  {
+    "media": "audio",
+    "case": "N5 wrong stego key",
+    "expected": "Payload Missing",
+    "actual": "Payload Missing",
+    "match": "yes",
+    "note": "No container for this stego key was found anywhere in the file. Either nothing was embedded, the stego key is wrong, or the LSB depth does not match the one used at embedding."
+  },
+  {
+    "media": "audio",
+    "case": "N6 embedded manually, verified with derived offset",
+    "expected": "Wrong Start Location",
+    "actual": "Wrong Start Location",
+    "match": "yes",
+    "note": "embedded at carrier 50,000"
+  },
+  {
+    "media": "audio",
+    "case": "N7 wrong LSB depth at verification",
+    "expected": "Payload Missing",
+    "actual": "Payload Missing",
+    "match": "yes",
+    "note": "No container for this stego key was found anywhere in the file. Either nothing was embedded, the stego key is wrong, or the LSB depth does not match the one used at embedding."
+  },
+  {
+    "media": "audio",
+    "case": "N8 payload larger than capacity",
+    "expected": "refused",
+    "actual": "refused",
+    "match": "yes",
+    "note": "Payload needs 884,904 bits but this cover holds 441,000 at 1 LSB(s). Short by 443,904 bits."
+  }
+]

@@ -1,0 +1,7 @@
+# Core dependencies. Pinned to minimum versions known to work rather than
+# exact versions, so a marker on a slightly different environment is not
+# blocked by a resolver conflict.
+streamlit>=1.40
+numpy>=1.24
+pillow>=10.0
+cryptography>=42.0
