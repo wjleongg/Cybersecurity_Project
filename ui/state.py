@@ -34,6 +34,8 @@ _DERIVED_KEYS = (
     "verify_result",
     "attacked_bytes",
     "attack_description",
+    "register_result",
+    "ledger_result",
 )
 
 
@@ -89,8 +91,9 @@ def clear_encode_results(media: str) -> None:
 
 
 def clear_verify_result(media: str) -> None:
-    """Drop only the verification outcome."""
+    """Drop the verification outcome and the ledger opinion that went with it."""
     put(media, "verify_result", None)
+    put(media, "ledger_result", None)
 
 
 def track_upload(media: str, slot: str, uploaded) -> bytes | None:

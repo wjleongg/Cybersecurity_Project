@@ -19,7 +19,7 @@ st.set_page_config(
     layout="wide",
 )
 
-from ui import audio_tab, image_tab, key_panel, state  # noqa: E402
+from ui import audio_tab, image_tab, key_panel, ledger_panel, state  # noqa: E402
 
 
 def main() -> None:
@@ -35,8 +35,8 @@ def main() -> None:
     key_panel.render()
     st.write("")
 
-    tab_image, tab_audio, tab_about = st.tabs(
-        ["Image (PNG)", "Audio (WAV)", "How it works"]
+    tab_image, tab_audio, tab_ledger, tab_about = st.tabs(
+        ["Image (PNG)", "Audio (WAV)", "Ledger", "How it works"]
     )
 
     with tab_image:
@@ -44,6 +44,9 @@ def main() -> None:
 
     with tab_audio:
         audio_tab.render()
+
+    with tab_ledger:
+        ledger_panel.render_panel()
 
     with tab_about:
         _render_about()
@@ -62,8 +65,21 @@ A container is written into the least significant bits of the cover object:
 | Magic marker | 4 bytes | Keyed, so only a stego-key holder can recognise a container |
 | Version, flags, length | 6 bytes | Format version and payload size |
 | Header CRC | 4 bytes | Rejects a misread header before it can be acted on |
-| Payload | variable | Canonical JSON: media ID, timestamp, cover hash, nonce, issuer, LSB depth, message |
+| Payload | variable | Canonical JSON: media ID, timestamp, cover hash, nonce, issuer, LSB depth, and the content |
 | Signature | 64 bytes | Ed25519 over version, flags, length and payload |
+
+#### Text or file payloads
+
+The hidden content is either a text message or a whole file. A file payload is
+embedded byte for byte and rendered on extraction according to its type: an
+image is displayed, audio gets a player, video gets a video element, and
+anything else is offered as a download. Hiding a PNG inside a PNG, or a WAV
+inside a WAV, is the clearest demonstration that the payload is played rather
+than merely read.
+
+Plain text is stored in the payload JSON as literal text. File content and any
+encrypted content is base64, which costs four bytes for every three — so a
+file payload needs roughly a third more capacity than its size on disk.
 
 #### How the start location works
 

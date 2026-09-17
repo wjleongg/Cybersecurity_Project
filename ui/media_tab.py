@@ -15,8 +15,8 @@ from typing import Callable
 
 import streamlit as st
 
-from core import engine, payload as payload_mod
-from ui import components, messages, state
+from core import crypto_utils, engine, payload as payload_mod
+from ui import components, ledger_panel, messages, state
 
 
 @dataclass
@@ -249,6 +249,13 @@ def _do_encode(
         st.error(f"Embedding failed: {exc}", icon=":material/error:")
         return
 
+    # Register the issuance. A ledger failure is reported but never undoes an
+    # embed that already succeeded: the stego file exists either way.
+    ledger = ledger_panel.get_ledger()
+    if ledger.enabled:
+        reg = ledger.register(result.record, st.session_state["keypair"].fingerprint)
+        state.put(media, "register_result", reg)
+
     state.put(media, "encode_result", result)
     state.put(media, "stego_carriers", result.stego_carriers)
     state.put(media, "stego_bytes", adapter.rebuild(cover, result.stego_carriers))
@@ -282,6 +289,13 @@ def _render_encode_output(adapter, media, cover, cover_bytes) -> None:
         f"{result.start_index:,}  ·  {result.n_lsb} LSB  ·  media ID "
         f"`{result.record.media_id}`"
     )
+
+    reg = state.get(media, "register_result")
+    if reg is not None and reg.status.value != "Ledger disabled":
+        if reg.status.value == "Registered":
+            st.caption(f"Ledger · {reg.message}")
+        else:
+            st.warning(f"Ledger · {reg.message}", icon=":material/database_off:")
 
     st.download_button(
         f"Download stego {adapter.label}",
@@ -454,6 +468,23 @@ def _verify_section(adapter: MediaAdapter, media: str) -> None:
         )
         state.put(media, "verify_result", result)
 
+        ledger = ledger_panel.get_ledger()
+        if ledger.enabled and result.record is not None:
+            check = ledger.check(result.record)
+            state.put(media, "ledger_result", check)
+            ledger.log_verification(
+                media_id=result.record.media_id,
+                media_type=adapter.media_type,
+                verdict=result.verdict.value,
+                ledger_status=check.status.value,
+                signer_fingerprint=crypto_utils.public_key_fingerprint(
+                    st.session_state["public_key"]
+                ),
+                detail=result.reason,
+            )
+        else:
+            state.put(media, "ledger_result", None)
+
     st.caption(
         "Replay check: verifying the exact same untouched file a second time "
         "reports Replay Detected — no tampering needed to demonstrate it, "
@@ -471,6 +502,11 @@ def _render_verify_output(adapter: MediaAdapter, media: str, verify_bytes: bytes
         return
 
     components.verdict_block(result)
+
+    ledger_result = state.get(media, "ledger_result")
+    if ledger_result is not None:
+        ledger_panel.contradiction_banner(result.verdict, ledger_result)
+        ledger_panel.status_line(ledger_result)
 
     adapter.render_preview(verify_bytes, "File under verification")
 
