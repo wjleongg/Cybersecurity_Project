@@ -56,11 +56,29 @@ def render(adapter: MediaAdapter) -> None:
 def _encode_section(adapter: MediaAdapter, media: str) -> None:
     components.section_label("ENCODE")
 
-    uploaded = st.file_uploader(
-        f"Cover {adapter.label}",
-        type=adapter.extensions,
-        key=f"{media}_cover_upload",
-    )
+    upload_col, reset_col = st.columns([4, 1])
+    with upload_col:
+        uploaded = st.file_uploader(
+            f"Cover {adapter.label}",
+            type=adapter.extensions,
+            key=f"{media}_cover_upload",
+        )
+    with reset_col:
+        st.write("")
+        st.write("")
+        if st.button(
+            "Clear results",
+            key=f"{media}_reset",
+            width="stretch",
+            help=(
+                "Drops the stego output, the tampered file and the verdict for "
+                "this tab. The uploaded files and the signing keys stay."
+            ),
+        ):
+            state.clear_encode_results(media)
+            state.clear_verify_result(media)
+            st.rerun()
+
     cover_bytes = state.track_upload(media, "cover", uploaded)
 
     if cover_bytes is None:
@@ -257,6 +275,7 @@ def _do_encode(
         state.put(media, "register_result", reg)
 
     state.put(media, "encode_result", result)
+    state.put(media, "result_cover_id", state.get(media, "cover_id"))
     state.put(media, "stego_carriers", result.stego_carriers)
     state.put(media, "stego_bytes", adapter.rebuild(cover, result.stego_carriers))
     state.put(media, "attacked_bytes", None)
@@ -265,6 +284,11 @@ def _do_encode(
 
 def _render_encode_output(adapter, media, cover, cover_bytes) -> None:
     """Side-by-side comparison, quality numbers and the download button."""
+    # Defensive: if the stored result belongs to a cover that is no longer
+    # loaded, drop it rather than show it next to the wrong file.
+    if state.results_are_stale(media):
+        state.clear_encode_results(media)
+
     result = state.get(media, "encode_result")
     stego_bytes = state.get(media, "stego_bytes")
 
