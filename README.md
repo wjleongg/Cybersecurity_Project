@@ -1,8 +1,8 @@
-# Steganographic image and audio integrity verification
+# Steganographic image, audio and video integrity verification
 
 INF2005 ACW1. A GUI tool that hides a signed verification payload in the least
-significant bits of a PNG or a WAV file, and later checks whether that file is
-still what it claimed to be.
+significant bits of a PNG, a WAV or an uncompressed AVI file, and later checks
+whether that file is still what it claimed to be.
 
 ## What it does
 
@@ -29,16 +29,22 @@ streamlit run app.py
 
 The app opens at `...`.
 
+No separate system `ffmpeg` install is required for the video path.
+`opencv-python-headless` (see requirements.txt) bundles its own FFmpeg
+read/write plugin, so `core/video_stego.py` never shells out to a command
+line tool — see the Formats section below for why that matters in practice,
+not just in principle.
+
 ## Generating the sample files
 
 ```bash
 python -m scripts.make_samples
 ```
 
-This writes a cover PNG and WAV, protected and tampered versions of each, a
-demo keypair, and `test_evidence/test_evidence.md` recording all 22 cases and
-the verdict each produced. It exits non-zero if any case gives an unexpected
-verdict, so it doubles as a regression check.
+This writes a cover PNG, WAV and AVI, protected and tampered versions of
+each, a demo keypair, and `test_evidence/test_evidence.md` recording all 36
+cases and the verdict each produced. It exits non-zero if any case gives an
+unexpected verdict, so it doubles as a regression check.
 
 ## Running the tests
 
@@ -46,9 +52,10 @@ verdict, so it doubles as a regression check.
 python -m tests.test_core
 ```
 
-69 assertions across both media types: round trips at every LSB depth from 1
-to 8, wrap-around embedding, hash stability, all six verdicts, format
-rejection, and start-location determinism.
+119 assertions across all three media types: round trips at every LSB depth
+from 1 to 8, wrap-around embedding, hash stability, all six verdicts, format
+rejection, and start-location determinism (including the video frame-index
+derivation).
 
 ## Using the tool
 
@@ -61,13 +68,14 @@ different fingerprints explain the failure better than the verdict alone.
 and what the container's marker looks like. Both parties need the same value.
 It is never written into the file.
 
-**Image and Audio tabs** each contain the full workflow: upload, configure,
-embed, compare, attack, verify. Grouping by media rather than by direction
-means a demonstration of the image case never has to leave the image tab.
+**Image, Audio and Video tabs** each contain the full workflow: upload,
+configure, embed, compare, attack, verify. Grouping by media rather than by
+direction means a demonstration of the image case never has to leave the
+image tab.
 
 ### Encoding
 
-1. Upload a cover PNG or WAV.
+1. Upload a cover PNG, WAV or AVI.
 2. Choose the LSB depth (1–8). Higher carries more, distorts more.
 3. Choose the start location mode. **Derived** computes it from the stego key,
    and the verifier recomputes the same value. **Manual** lets you pick, and
@@ -97,18 +105,22 @@ core/
   crypto_utils.py          SHA-256, Ed25519 sign/verify, AES-GCM, PBKDF2
   container.py             Binary container framing and parsing
   payload.py               Payload record, canonical JSON, message encryption
-  location.py              Keyed start-location and magic-marker derivation
+  location.py              Keyed start-location, frame-index and magic-marker derivation
   image_stego.py           PNG loading, carriers, rebuild, PSNR
   audio_stego.py           WAV loading, carriers, rebuild, SNR
+  video_stego.py           AVI loading, carriers, rebuild, PSNR (reused from image_stego)
   engine.py                Encode/verify orchestration, verdict logic
   attacks.py               Tamper simulation for negative cases
+  ledger.py                Optional Supabase issuance/revocation ledger
 ui/
   state.py                 Session state across Streamlit reruns
   components.py            Verdict block, capacity meter, tables
   key_panel.py             Shared signing key panel
-  media_tab.py             The workflow, shared by both media types
+  media_tab.py             The workflow, shared by all three media types
   image_tab.py             PNG adapter
   audio_tab.py             WAV adapter
+  video_tab.py             AVI adapter, with a frame scrubber for comparison
+  ledger_panel.py          Ledger tab and ledger-aware verdict presentation
   messages.py              The three required payload sizes
 scripts/make_samples.py    Sample generation and evidence run
 tests/test_core.py         End-to-end tests
@@ -132,8 +144,19 @@ signed and 8-bit samples are unsigned with a midpoint of 128, so the two are
 handled separately rather than assumed identical. 24-bit has no native integer
 width; 32-bit float has no meaningful least significant bit.
 
-File type is checked by reading the actual PNG signature or RIFF/WAVE header,
-not by trusting the extension.
+**Uncompressed AVI only for video**, raw frames tagged with the `RGBA`
+fourcc. Consumer MP4/H.264 re-encodes with lossy motion compensation and
+destroys the payload immediately, the same way JPEG does for images. Frame
+dimensions are forced to even numbers (a trailing row/column is cropped),
+because the raw AVI muxer pads odd dimensions internally and that padding is
+not restored on read, which would corrupt the LSB planes at the frame edge.
+A video's carriers are every frame's pixel bytes flattened end to end, so a
+container that does not fit in the frame it starts in simply continues into
+the frames that follow — the same wraparound that lets a payload run past
+the end of an image row.
+
+File type is checked by reading the actual PNG signature, RIFF/WAVE header or
+RIFF/AVI header, not by trusting the extension.
 
 ## Design notes
 
@@ -151,7 +174,10 @@ and reported as Signature Invalid or Payload Missing.
 carrier count | LSB depth) mod carrier count`. Both parties derive the same
 offset without transmitting it, and the offset changes for a different cover
 object or a different LSB setting, so two files protected with one key do not
-share a reusable offset.
+share a reusable offset. Video reuses this same formula twice: once over
+frame count to pick a start frame, then again over that frame's carrier
+count to pick the offset inside it — one explainable mechanism for all three
+media types rather than a video-specific one bolted on beside it.
 
 **Why the magic marker is keyed too.** A fixed marker such as the ASCII bytes
 `STEG` would let anyone scan every offset for it and recover the location
@@ -184,6 +210,10 @@ is authentic and untampered; they simply cannot read the message.
 - Audio degrades audibly at high LSB depths well before an image looks wrong,
   because the ear is sensitive to broadband noise. This is worth demonstrating
   rather than hiding.
+- Browsers do not reliably play a raw/uncompressed AVI through an HTML5
+  `<video>` element. The Video tab includes a frame-by-frame scrubber
+  alongside the player for this reason: it always renders, since it is just
+  still images, and it is what actually lets cover and stego be compared.
 
 ## Keys
 

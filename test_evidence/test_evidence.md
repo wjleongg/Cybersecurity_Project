@@ -5,19 +5,19 @@ by running the same engine the GUI calls.
 
 - Stego key: `inf2005-p1-4-shared-stego-key`
 - Message passphrase (encrypted cases): `confidential-demo-passphrase`
-- Demo public key fingerprint: `f3:db:47:61:f8:5e:18:ec`
-- Other-party public key fingerprint: `fb:7c:73:28:93:16:d4:6b`
+- Demo public key fingerprint: `52:d6:1c:96:cf:92:9a:2b`
+- Other-party public key fingerprint: `80:62:60:36:cf:27:7b:15`
 
 ## Cover object statistics, positive case at 2 LSB
 
-| Measure | Image | Audio |
-| --- | --- | --- |
-| Carriers | 1,440,000 | 441,000 |
-| Container size | 468 bytes | 468 bytes |
-| Derived start carrier | 38,421 | 343,888 |
-| Carriers changed | 1,423 (0.099%) | 1,404 (0.318%) |
-| Max delta | 3 | 3 |
-| Quality | PSNR 73.0 dB | SNR 94.3 dB |
+| Measure | Image | Audio | Video |
+| --- | --- | --- | --- |
+| Carriers | 1,440,000 | 441,000 | 216,000 |
+| Container size | 524 bytes | 524 bytes | 524 bytes |
+| Derived start carrier | 38,421 | 343,888 | 98,729 |
+| Carriers changed | 1,583 (0.11%) | 1,593 (0.361%) | 1,596 (0.739%) |
+| Max delta | 3 | 3 | 3 |
+| Quality | PSNR 72.4 dB | SNR 93.7 dB | PSNR 64.7 dB |
 
 ## Cases
 
@@ -26,6 +26,7 @@ by running the same engine the GUI calls.
 | image | P1 short payload, derived location | Authentic | Authentic | yes |
 | image | P2 large payload at 3 LSB | Authentic | Authentic | yes |
 | image | P3 encrypted custom payload | Authentic | Authentic | yes |
+| image | P4 hidden PNG file payload | Authentic | Authentic | yes |
 | image | N1 media edited after signing | Tampered | Tampered | yes |
 | image | N2 verified with a different public key | Signature Invalid | Signature Invalid | yes |
 | image | N3 embedded payload corrupted | Signature Invalid | Signature Invalid | yes |
@@ -37,6 +38,7 @@ by running the same engine the GUI calls.
 | audio | P1 short payload, derived location | Authentic | Authentic | yes |
 | audio | P2 large payload at 3 LSB | Authentic | Authentic | yes |
 | audio | P3 encrypted custom payload | Authentic | Authentic | yes |
+| audio | P4 hidden PNG file payload | Authentic | Authentic | yes |
 | audio | N1 media edited after signing | Tampered | Tampered | yes |
 | audio | N2 verified with a different public key | Signature Invalid | Signature Invalid | yes |
 | audio | N3 embedded payload corrupted | Signature Invalid | Signature Invalid | yes |
@@ -45,12 +47,25 @@ by running the same engine the GUI calls.
 | audio | N6 embedded manually, verified with derived offset | Wrong Start Location | Wrong Start Location | yes |
 | audio | N7 wrong LSB depth at verification | Payload Missing | Payload Missing | yes |
 | audio | N8 payload larger than capacity | refused | refused | yes |
+| video | P1 short payload, derived location | Authentic | Authentic | yes |
+| video | P2 large payload at 3 LSB | Authentic | Authentic | yes |
+| video | P3 encrypted custom payload | Authentic | Authentic | yes |
+| video | P4 hidden PNG file payload | Authentic | Authentic | yes |
+| video | N1 media edited after signing | Tampered | Tampered | yes |
+| video | N2 verified with a different public key | Signature Invalid | Signature Invalid | yes |
+| video | N3 embedded payload corrupted | Signature Invalid | Signature Invalid | yes |
+| video | N4 unprotected cover object | Payload Missing | Payload Missing | yes |
+| video | N5 wrong stego key | Payload Missing | Payload Missing | yes |
+| video | N6 embedded manually, verified with derived offset | Wrong Start Location | Wrong Start Location | yes |
+| video | N7 wrong LSB depth at verification | Payload Missing | Payload Missing | yes |
+| video | N8 payload larger than capacity | refused | refused | yes |
 
 ## Notes
 
 - **image / P1 short payload, derived location** — Signature verified against the loaded public key and the media hash matches the signed value. This file is intact and was issued by the holder of the corresponding private key.
 - **image / P2 large payload at 3 LSB** — Signature verified against the loaded public key and the media hash matches the signed value. This file is intact and was issued by the holder of the corresponding private key.
 - **image / P3 encrypted custom payload** — message recovered: True
+- **image / P4 hidden PNG file payload** — 7,283 byte PNG embedded; bytes identical on extraction: True
 - **image / N1 media edited after signing** — Brightened the image, leaving the low 2 bit(s) untouched
 - **image / N2 verified with a different public key** — A payload was extracted, but its signature does not verify against the loaded public key. Either the payload was altered after signing, or it was signed by a different party.
 - **image / N3 embedded payload corrupted** — Randomised 64 carriers inside the signed payload
@@ -58,10 +73,11 @@ by running the same engine the GUI calls.
 - **image / N5 wrong stego key** — No container for this stego key was found anywhere in the file. Either nothing was embedded, the stego key is wrong, or the LSB depth does not match the one used at embedding.
 - **image / N6 embedded manually, verified with derived offset** — embedded at carrier 50,000
 - **image / N7 wrong LSB depth at verification** — No container for this stego key was found anywhere in the file. Either nothing was embedded, the stego key is wrong, or the LSB depth does not match the one used at embedding.
-- **image / N8 payload larger than capacity** — Payload needs 2,882,904 bits but this cover holds 1,440,000 at 1 LSB(s). Short by 1,442,904 bits.
+- **image / N8 payload larger than capacity** — Payload needs 2,883,352 bits but this cover holds 1,440,000 at 1 LSB(s). Short by 1,443,352 bits.
 - **audio / P1 short payload, derived location** — Signature verified against the loaded public key and the media hash matches the signed value. This file is intact and was issued by the holder of the corresponding private key.
 - **audio / P2 large payload at 3 LSB** — Signature verified against the loaded public key and the media hash matches the signed value. This file is intact and was issued by the holder of the corresponding private key.
 - **audio / P3 encrypted custom payload** — message recovered: True
+- **audio / P4 hidden PNG file payload** — 7,283 byte PNG embedded; bytes identical on extraction: True
 - **audio / N1 media edited after signing** — Shifted the audio level, leaving the low 2 bit(s) untouched
 - **audio / N2 verified with a different public key** — A payload was extracted, but its signature does not verify against the loaded public key. Either the payload was altered after signing, or it was signed by a different party.
 - **audio / N3 embedded payload corrupted** — Randomised 64 carriers inside the signed payload
@@ -69,4 +85,16 @@ by running the same engine the GUI calls.
 - **audio / N5 wrong stego key** — No container for this stego key was found anywhere in the file. Either nothing was embedded, the stego key is wrong, or the LSB depth does not match the one used at embedding.
 - **audio / N6 embedded manually, verified with derived offset** — embedded at carrier 50,000
 - **audio / N7 wrong LSB depth at verification** — No container for this stego key was found anywhere in the file. Either nothing was embedded, the stego key is wrong, or the LSB depth does not match the one used at embedding.
-- **audio / N8 payload larger than capacity** — Payload needs 884,904 bits but this cover holds 441,000 at 1 LSB(s). Short by 443,904 bits.
+- **audio / N8 payload larger than capacity** — Payload needs 885,352 bits but this cover holds 441,000 at 1 LSB(s). Short by 444,352 bits.
+- **video / P1 short payload, derived location** — Signature verified against the loaded public key and the media hash matches the signed value. This file is intact and was issued by the holder of the corresponding private key.
+- **video / P2 large payload at 3 LSB** — Signature verified against the loaded public key and the media hash matches the signed value. This file is intact and was issued by the holder of the corresponding private key.
+- **video / P3 encrypted custom payload** — message recovered: True
+- **video / P4 hidden PNG file payload** — 7,283 byte PNG embedded; bytes identical on extraction: True
+- **video / N1 media edited after signing** — Brightened the image, leaving the low 2 bit(s) untouched
+- **video / N2 verified with a different public key** — A payload was extracted, but its signature does not verify against the loaded public key. Either the payload was altered after signing, or it was signed by a different party.
+- **video / N3 embedded payload corrupted** — Randomised 64 carriers inside the signed payload
+- **video / N4 unprotected cover object** — No container for this stego key was found anywhere in the file. Either nothing was embedded, the stego key is wrong, or the LSB depth does not match the one used at embedding.
+- **video / N5 wrong stego key** — No container for this stego key was found anywhere in the file. Either nothing was embedded, the stego key is wrong, or the LSB depth does not match the one used at embedding.
+- **video / N6 embedded manually, verified with derived offset** — embedded at carrier 50,000
+- **video / N7 wrong LSB depth at verification** — No container for this stego key was found anywhere in the file. Either nothing was embedded, the stego key is wrong, or the LSB depth does not match the one used at embedding.
+- **video / N8 payload larger than capacity** — Payload needs 435,352 bits but this cover holds 216,000 at 1 LSB(s). Short by 219,352 bits.

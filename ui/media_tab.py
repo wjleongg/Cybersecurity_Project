@@ -1,13 +1,14 @@
-"""The encode / attack / verify workflow, shared by both media types.
+"""The encode / attack / verify workflow, shared by all media types.
 
-Image and audio differ in how a cover object is loaded, previewed and measured
-for quality, and in nothing else. Those differences are supplied by an adapter
-(see image_tab.py and audio_tab.py); everything below is common.
+Image, audio and video differ in how a cover object is loaded, previewed and
+measured for quality, and in nothing else. Those differences are supplied by
+an adapter (see image_tab.py, audio_tab.py and video_tab.py); everything
+below is common.
 
-Writing this once rather than twice is not only about repetition. It means a
-fix to the verification flow cannot land in one tab and be forgotten in the
-other, which would be very hard to spot during a demo and very easy for a
-marker to find.
+Writing this once rather than three times is not only about repetition. It
+means a fix to the verification flow cannot land in one tab and be forgotten
+in the others, which would be very hard to spot during a demo and very easy
+for a marker to find.
 """
 
 from dataclasses import dataclass
@@ -21,9 +22,9 @@ from ui import components, ledger_panel, messages, state
 
 @dataclass
 class MediaAdapter:
-    """Everything that differs between the image and audio workflows."""
+    """Everything that differs between the image, audio and video workflows."""
 
-    media_type: str                 # "image" or "audio"
+    media_type: str                 # "image", "audio" or "video"
     label: str                      # shown on the tab
     extensions: list[str]
     load: Callable                  # bytes -> cover object
@@ -308,10 +309,12 @@ def _render_encode_output(adapter, media, cover, cover_bytes) -> None:
     stats = adapter.diff_stats(cover, result.stego_carriers)
     components.stats_row(stats, adapter.quality_key, adapter.quality_label)
 
+    locate = getattr(cover, "locate_span", None)
+    span = f"  ·  {locate(result.start_index, result.container_bytes, result.n_lsb)}" if locate else ""
     st.caption(
         f"Container {result.container_bytes:,} bytes  ·  start carrier "
         f"{result.start_index:,}  ·  {result.n_lsb} LSB  ·  media ID "
-        f"`{result.record.media_id}`"
+        f"`{result.record.media_id}`{span}"
     )
 
     reg = state.get(media, "register_result")

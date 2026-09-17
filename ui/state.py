@@ -6,17 +6,17 @@ each run, which for this app would mean losing the loaded keys, the stego file
 just produced, and the last verdict. Every value that has to outlive a single
 interaction is registered here.
 
-State is namespaced per media type ("image", "audio") so the two tabs cannot
-overwrite each other's results. Signing keys are deliberately not namespaced:
-one keypair signs both media types, and duplicating it would let the two tabs
-drift apart.
+State is namespaced per media type ("image", "audio", "video") so the tabs
+cannot overwrite each other's results. Signing keys are deliberately not
+namespaced: one keypair signs every media type, and duplicating it would let
+the tabs drift apart.
 """
 
 import hashlib
 
 import streamlit as st
 
-MEDIA_TYPES = ("image", "audio")
+MEDIA_TYPES = ("image", "audio", "video")
 
 # Results that must be cleared when a new file is uploaded, so a verdict from
 # the previous file never sits on screen next to the current one.

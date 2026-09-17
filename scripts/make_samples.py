@@ -29,7 +29,7 @@ from PIL import Image
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-from core import attacks, audio_stego, crypto_utils, engine, image_stego  # noqa: E402
+from core import attacks, audio_stego, crypto_utils, engine, image_stego, video_stego  # noqa: E402
 from core import payload as pm  # noqa: E402
 from ui import messages  # noqa: E402
 
@@ -42,6 +42,8 @@ STEGO_KEY = "inf2005-p1-4-shared-stego-key"
 WRONG_STEGO_KEY = "an-attacker-guess"
 MSG_PASSPHRASE = "confidential-demo-passphrase"
 ISSUER = "Team P1-4"
+
+EXTENSIONS = {"image": "png", "audio": "wav", "video": "avi"}
 
 
 # --------------------------------------------------------------------------
@@ -151,6 +153,44 @@ def make_cover_audio(seconds=5.0, rate=44100, channels=2) -> bytes:
     return buf.getvalue()
 
 
+def make_cover_video(width=80, height=60, seconds=2.5, fps=6.0) -> bytes:
+    """A tiny synthetic clip: a soft gradient with a sun that drifts across.
+
+    Kept small on purpose -- a few seconds at low resolution is enough to
+    exercise every code path, and it keeps the repo light. Deterministic like
+    the other two covers, and animated rather than a still repeated, so a
+    frame-by-frame comparison actually has something to show.
+    """
+    n_frames = max(1, int(seconds * fps))
+    xs = np.linspace(0, 1, width, dtype=np.float32)
+    ys = np.linspace(0, 1, height, dtype=np.float32)
+    gx, gy = np.meshgrid(xs, ys)
+
+    frames = np.empty((n_frames, height, width, 3), dtype=np.uint8)
+    for i in range(n_frames):
+        t = i / max(1, n_frames - 1)
+        sun_x = 0.15 + 0.7 * t
+        d = np.sqrt((gx - sun_x) ** 2 + ((gy - 0.3) * 1.4) ** 2)
+        glow = np.clip(1.0 - d / 0.28, 0.0, 1.0) ** 1.6
+
+        r = 0.30 + 0.25 * (1 - gy) + 0.35 * glow
+        g = 0.38 + 0.20 * (1 - gy) + 0.28 * glow
+        b = 0.55 + 0.10 * (1 - gy) + 0.10 * glow
+
+        stack = np.clip(np.stack([r, g, b], axis=-1), 0, 1)
+        frames[i] = (stack * 255).astype(np.uint8)
+
+    cover = video_stego.VideoCover(
+        carriers=frames.reshape(-1).copy(),
+        frame_count=n_frames,
+        height=height,
+        width=width,
+        channels=3,
+        fps=fps,
+    )
+    return cover.to_avi_bytes()
+
+
 # --------------------------------------------------------------------------
 # Case runner
 # --------------------------------------------------------------------------
@@ -181,7 +221,8 @@ def run_media_cases(log, media_type, cover_bytes, load, rebuild_attr, attack_set
     """Run every positive and negative case for one cover object."""
     print(f"\n{media_type.upper()} cases")
     cover = load(cover_bytes)
-    prefix = "image" if media_type == "image" else "audio"
+    prefix = media_type
+    ext = EXTENSIONS[media_type]
     written = {}
 
     # POSITIVE 1: short message, derived location
@@ -189,7 +230,7 @@ def run_media_cases(log, media_type, cover_bytes, load, rebuild_attr, attack_set
         cover, media_type, messages.SHORT_MESSAGE.encode(), ISSUER, 2, STEGO_KEY, kp.private_key
     )
     stego1 = getattr(cover, rebuild_attr)(r1.stego_carriers)
-    written[f"stego_{prefix}.png" if media_type == "image" else f"stego_{prefix}.wav"] = stego1
+    written[f"stego_{prefix}.{ext}"] = stego1
     v = engine.verify(load(stego1), media_type, 2, STEGO_KEY, kp.public_key)
     log.add(media_type, "P1 short payload, derived location", "Authentic", v)
 
@@ -207,8 +248,7 @@ def run_media_cases(log, media_type, cover_bytes, load, rebuild_attr, attack_set
         kp.private_key, passphrase=MSG_PASSPHRASE,
     )
     stego3 = getattr(cover, rebuild_attr)(r3.stego_carriers)
-    key = f"stego_{prefix}_encrypted.png" if media_type == "image" else f"stego_{prefix}_encrypted.wav"
-    written[key] = stego3
+    written[f"stego_{prefix}_encrypted.{ext}"] = stego3
     v = engine.verify(
         load(stego3), media_type, 2, STEGO_KEY, kp.public_key, passphrase=MSG_PASSPHRASE
     )
@@ -225,11 +265,7 @@ def run_media_cases(log, media_type, cover_bytes, load, rebuild_attr, attack_set
         kind=pm.KIND_FILE, filename="thumbnail.png",
     )
     stego4f = getattr(cover, rebuild_attr)(r4f.stego_carriers)
-    key = (
-        f"stego_{prefix}_filepayload.png" if media_type == "image"
-        else f"stego_{prefix}_filepayload.wav"
-    )
-    written[key] = stego4f
+    written[f"stego_{prefix}_filepayload.{ext}"] = stego4f
     v = engine.verify(load(stego4f), media_type, 3, STEGO_KEY, kp.public_key)
     exact = v.payload is not None and v.payload.data == thumb
     log.add(
@@ -240,8 +276,7 @@ def run_media_cases(log, media_type, cover_bytes, load, rebuild_attr, attack_set
     # NEGATIVE 1: tampered media, payload planes preserved
     attacked, desc = list(attack_set.values())[0](r1.stego_carriers, {"start": r1.start_index, "n_lsb": 2})
     tampered = getattr(cover, rebuild_attr)(attacked)
-    key = f"tampered_{prefix}.png" if media_type == "image" else f"tampered_{prefix}.wav"
-    written[key] = tampered
+    written[f"tampered_{prefix}.{ext}"] = tampered
     v = engine.verify(load(tampered), media_type, 2, STEGO_KEY, kp.public_key)
     log.add(media_type, "N1 media edited after signing", "Tampered", v, note=desc)
 
@@ -301,6 +336,9 @@ def run_media_cases(log, media_type, cover_bytes, load, rebuild_attr, attack_set
     if media_type == "image":
         stats = image_stego.difference_stats(cover.carriers, r1.stego_carriers)
         quality = f"PSNR {stats['psnr_db']:.1f} dB"
+    elif media_type == "video":
+        stats = video_stego.difference_stats(cover.carriers, r1.stego_carriers)
+        quality = f"PSNR {stats['psnr_db']:.1f} dB"
     else:
         stats = audio_stego.difference_stats(cover, r1.stego_carriers)
         quality = f"SNR {stats['snr_db']:.1f} dB"
@@ -323,10 +361,13 @@ def main() -> int:
     print("Generating cover objects")
     cover_png = make_cover_image()
     cover_wav = make_cover_audio()
+    cover_avi = make_cover_video()
     (SAMPLES / "cover_image.png").write_bytes(cover_png)
     (SAMPLES / "cover_audio.wav").write_bytes(cover_wav)
+    (SAMPLES / "cover_video.avi").write_bytes(cover_avi)
     print(f"  cover_image.png  {len(cover_png):,} bytes")
     print(f"  cover_audio.wav  {len(cover_wav):,} bytes")
+    print(f"  cover_video.avi  {len(cover_avi):,} bytes")
 
     kp = crypto_utils.generate_keypair()
     other_kp = crypto_utils.generate_keypair()
@@ -352,18 +393,22 @@ def main() -> int:
         log, "audio", cover_wav, audio_stego.load_audio, "to_wav_bytes",
         attacks.AUDIO_ATTACKS, kp, other_kp,
     )
+    vid_files, vid_stats = run_media_cases(
+        log, "video", cover_avi, video_stego.load_video, "to_avi_bytes",
+        attacks.VIDEO_ATTACKS, kp, other_kp,
+    )
 
-    for name, data in {**img_files, **aud_files}.items():
+    for name, data in {**img_files, **aud_files, **vid_files}.items():
         (SAMPLES / name).write_bytes(data)
 
-    _write_evidence(log, kp, other_kp, img_stats, aud_stats)
+    _write_evidence(log, kp, other_kp, img_stats, aud_stats, vid_stats)
 
     mismatches = [r for r in log.rows if r["match"] != "yes"]
     print(f"\n{len(log.rows)} cases, {len(mismatches)} mismatches")
     return 1 if mismatches else 0
 
 
-def _write_evidence(log, kp, other_kp, img_stats, aud_stats) -> None:
+def _write_evidence(log, kp, other_kp, img_stats, aud_stats, vid_stats) -> None:
     """Write the markdown evidence log and a machine-readable copy."""
     lines = [
         "# Test evidence",
@@ -378,14 +423,14 @@ def _write_evidence(log, kp, other_kp, img_stats, aud_stats) -> None:
         "",
         "## Cover object statistics, positive case at 2 LSB",
         "",
-        "| Measure | Image | Audio |",
-        "| --- | --- | --- |",
-        f"| Carriers | {img_stats['carriers']:,} | {aud_stats['carriers']:,} |",
-        f"| Container size | {img_stats['container_bytes']:,} bytes | {aud_stats['container_bytes']:,} bytes |",
-        f"| Derived start carrier | {img_stats['derived_start']:,} | {aud_stats['derived_start']:,} |",
-        f"| Carriers changed | {img_stats['changed']:,} ({img_stats['changed_pct']}%) | {aud_stats['changed']:,} ({aud_stats['changed_pct']}%) |",
-        f"| Max delta | {img_stats['max_delta']} | {aud_stats['max_delta']} |",
-        f"| Quality | {img_stats['quality']} | {aud_stats['quality']} |",
+        "| Measure | Image | Audio | Video |",
+        "| --- | --- | --- | --- |",
+        f"| Carriers | {img_stats['carriers']:,} | {aud_stats['carriers']:,} | {vid_stats['carriers']:,} |",
+        f"| Container size | {img_stats['container_bytes']:,} bytes | {aud_stats['container_bytes']:,} bytes | {vid_stats['container_bytes']:,} bytes |",
+        f"| Derived start carrier | {img_stats['derived_start']:,} | {aud_stats['derived_start']:,} | {vid_stats['derived_start']:,} |",
+        f"| Carriers changed | {img_stats['changed']:,} ({img_stats['changed_pct']}%) | {aud_stats['changed']:,} ({aud_stats['changed_pct']}%) | {vid_stats['changed']:,} ({vid_stats['changed_pct']}%) |",
+        f"| Max delta | {img_stats['max_delta']} | {aud_stats['max_delta']} | {vid_stats['max_delta']} |",
+        f"| Quality | {img_stats['quality']} | {aud_stats['quality']} | {vid_stats['quality']} |",
         "",
         "## Cases",
         "",

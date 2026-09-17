@@ -19,14 +19,14 @@ st.set_page_config(
     layout="wide",
 )
 
-from ui import audio_tab, image_tab, key_panel, ledger_panel, state  # noqa: E402
+from ui import audio_tab, image_tab, key_panel, ledger_panel, state, video_tab  # noqa: E402
 
 
 def main() -> None:
     state.init()
 
     with st.container(border=True):
-        st.markdown("### Steganographic image and audio integrity verification")
+        st.markdown("### Steganographic image, audio and video integrity verification")
         st.caption(
             "LSB replacement with Ed25519-signed verification payloads and "
             "keyed start locations · INF2005 ACW1"
@@ -35,8 +35,8 @@ def main() -> None:
     key_panel.render()
     st.write("")
 
-    tab_image, tab_audio, tab_ledger, tab_about = st.tabs(
-        ["Image (PNG)", "Audio (WAV)", "Ledger", "How it works"]
+    tab_image, tab_audio, tab_video, tab_ledger, tab_about = st.tabs(
+        ["Image (PNG)", "Audio (WAV)", "Video (AVI)", "Ledger", "How it works"]
     )
 
     with tab_image:
@@ -44,6 +44,9 @@ def main() -> None:
 
     with tab_audio:
         audio_tab.render()
+
+    with tab_video:
+        video_tab.render()
 
     with tab_ledger:
         ledger_panel.render_panel()
@@ -88,6 +91,12 @@ The payload does not start at carrier zero. Its position is
 Both parties derive the same offset from the shared key without ever
 transmitting it, and the offset changes for a different cover object or a
 different LSB setting.
+
+Video adds one extra step ahead of that: the same formula picks a start
+*frame* (mod frame count), then the per-carrier formula above picks the
+offset inside that frame. The two derivations combine into one carrier index
+into the whole clip, so the same bitops wraparound that lets a payload run
+past the end of an image row lets it run into the frames that follow.
 
 The container's magic marker is derived from the same key. A fixed marker
 would let anyone scan every offset for it and find the payload without the

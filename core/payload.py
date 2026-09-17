@@ -138,7 +138,7 @@ class PayloadRecord:
     """Verification metadata plus the hidden content."""
 
     media_id: str
-    media_type: str          # "image" or "audio"
+    media_type: str          # "image", "audio" or "video"
     timestamp: str           # ISO 8601, UTC
     cover_hash: str          # SHA-256 hex of the stable representation
     nonce: str               # hex, freshness / replay defence
