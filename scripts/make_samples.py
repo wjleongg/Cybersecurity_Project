@@ -30,6 +30,7 @@ from PIL import Image
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from core import attacks, audio_stego, crypto_utils, engine, image_stego  # noqa: E402
+from core import payload as pm  # noqa: E402
 from ui import messages  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -185,7 +186,7 @@ def run_media_cases(log, media_type, cover_bytes, load, rebuild_attr, attack_set
 
     # POSITIVE 1: short message, derived location
     r1 = engine.encode(
-        cover, media_type, messages.SHORT_MESSAGE, ISSUER, 2, STEGO_KEY, kp.private_key
+        cover, media_type, messages.SHORT_MESSAGE.encode(), ISSUER, 2, STEGO_KEY, kp.private_key
     )
     stego1 = getattr(cover, rebuild_attr)(r1.stego_carriers)
     written[f"stego_{prefix}.png" if media_type == "image" else f"stego_{prefix}.wav"] = stego1
@@ -194,7 +195,7 @@ def run_media_cases(log, media_type, cover_bytes, load, rebuild_attr, attack_set
 
     # POSITIVE 2: large message, higher LSB depth
     r2 = engine.encode(
-        cover, media_type, messages.LARGE_MESSAGE, ISSUER, 3, STEGO_KEY, kp.private_key
+        cover, media_type, messages.LARGE_MESSAGE.encode(), ISSUER, 3, STEGO_KEY, kp.private_key
     )
     stego2 = getattr(cover, rebuild_attr)(r2.stego_carriers)
     v = engine.verify(load(stego2), media_type, 3, STEGO_KEY, kp.public_key)
@@ -202,7 +203,7 @@ def run_media_cases(log, media_type, cover_bytes, load, rebuild_attr, attack_set
 
     # POSITIVE 3: encrypted custom payload
     r3 = engine.encode(
-        cover, media_type, messages.CUSTOM_DEFAULT, ISSUER, 2, STEGO_KEY,
+        cover, media_type, messages.CUSTOM_DEFAULT.encode(), ISSUER, 2, STEGO_KEY,
         kp.private_key, passphrase=MSG_PASSPHRASE,
     )
     stego3 = getattr(cover, rebuild_attr)(r3.stego_carriers)
@@ -211,10 +212,29 @@ def run_media_cases(log, media_type, cover_bytes, load, rebuild_attr, attack_set
     v = engine.verify(
         load(stego3), media_type, 2, STEGO_KEY, kp.public_key, passphrase=MSG_PASSPHRASE
     )
-    ok = v.message == messages.CUSTOM_DEFAULT
+    ok = v.payload is not None and v.payload.as_text() == messages.CUSTOM_DEFAULT
     log.add(
         media_type, "P3 encrypted custom payload", "Authentic", v,
         note=f"message recovered: {ok}",
+    )
+
+    # POSITIVE 4: a file payload, played or displayed rather than read
+    thumb = make_cover_image(120, 90)
+    r4f = engine.encode(
+        cover, media_type, thumb, ISSUER, 3, STEGO_KEY, kp.private_key,
+        kind=pm.KIND_FILE, filename="thumbnail.png",
+    )
+    stego4f = getattr(cover, rebuild_attr)(r4f.stego_carriers)
+    key = (
+        f"stego_{prefix}_filepayload.png" if media_type == "image"
+        else f"stego_{prefix}_filepayload.wav"
+    )
+    written[key] = stego4f
+    v = engine.verify(load(stego4f), media_type, 3, STEGO_KEY, kp.public_key)
+    exact = v.payload is not None and v.payload.data == thumb
+    log.add(
+        media_type, "P4 hidden PNG file payload", "Authentic", v,
+        note=f"{len(thumb):,} byte PNG embedded; bytes identical on extraction: {exact}",
     )
 
     # NEGATIVE 1: tampered media, payload planes preserved
@@ -247,7 +267,7 @@ def run_media_cases(log, media_type, cover_bytes, load, rebuild_attr, attack_set
     # NEGATIVE 6: wrong start location
     manual = min(50_000, cover.num_carriers - 1)
     r4 = engine.encode(
-        cover, media_type, messages.SHORT_MESSAGE, ISSUER, 2, STEGO_KEY,
+        cover, media_type, messages.SHORT_MESSAGE.encode(), ISSUER, 2, STEGO_KEY,
         kp.private_key, start_mode="manual", manual_offset=manual,
     )
     stego4 = getattr(cover, rebuild_attr)(r4.stego_carriers)
@@ -264,7 +284,7 @@ def run_media_cases(log, media_type, cover_bytes, load, rebuild_attr, attack_set
     # NEGATIVE 8: capacity refusal
     huge = "x" * (cover.num_carriers // 4)
     try:
-        engine.encode(cover, media_type, huge, ISSUER, 1, STEGO_KEY, kp.private_key)
+        engine.encode(cover, media_type, huge.encode(), ISSUER, 1, STEGO_KEY, kp.private_key)
         print(f"  [MISMATCH] {media_type} N8 oversized payload was not refused")
         log.rows.append({
             "media": media_type, "case": "N8 payload larger than capacity",

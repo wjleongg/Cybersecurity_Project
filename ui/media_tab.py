@@ -15,7 +15,7 @@ from typing import Callable
 
 import streamlit as st
 
-from core import engine
+from core import engine, payload as payload_mod
 from ui import components, messages, state
 
 
@@ -122,32 +122,71 @@ def _encode_section(adapter: MediaAdapter, media: str) -> None:
             else:
                 st.caption("Offset is computed from the stego key at embed time.")
 
-        preset_name = st.selectbox(
-            "Payload", list(messages.PRESETS), key=f"{media}_preset"
-        )
-        message = st.text_area(
-            "Message to hide",
-            value=messages.PRESETS[preset_name],
-            height=110,
-            key=f"{media}_message_{preset_name}",
+        payload_kind = st.radio(
+            "Payload type",
+            ["Text message", "File"],
+            key=f"{media}_payload_kind",
+            horizontal=True,
+            help=(
+                "A file payload is embedded whole and played or displayed on "
+                "extraction. Hiding a PNG inside a PNG, or a WAV inside a WAV, "
+                "demonstrates the payload being executed rather than merely read."
+            ),
         )
 
+        if payload_kind == "Text message":
+            preset_name = st.selectbox(
+                "Preset", list(messages.PRESETS), key=f"{media}_preset"
+            )
+            message = st.text_area(
+                "Message to hide",
+                value=messages.PRESETS[preset_name],
+                height=110,
+                key=f"{media}_message_{preset_name}",
+            )
+            payload_data = message.encode("utf-8")
+            kind = payload_mod.KIND_TEXT
+            filename = ""
+        else:
+            payload_file = st.file_uploader(
+                "File to hide",
+                key=f"{media}_payload_file",
+                help=(
+                    "Any file. Images, audio and video are rendered inline on "
+                    "extraction; everything else is offered as a download."
+                ),
+            )
+            if payload_file is None:
+                st.caption("Choose a file to see whether it fits.")
+                payload_data = b""
+                filename = ""
+            else:
+                payload_data = payload_file.getvalue()
+                filename = payload_file.name
+                st.caption(
+                    f"`{filename}` · {len(payload_data):,} bytes · "
+                    f"{payload_mod.guess_mime(filename)}"
+                )
+            kind = payload_mod.KIND_FILE
+
         encrypt = st.checkbox(
-            "Encrypt the message (AES-256-GCM)",
+            "Encrypt the payload (AES-256-GCM)",
             key=f"{media}_encrypt",
             help=(
                 "Protects confidentiality. The signature still verifies without "
-                "the passphrase; only reading the message needs it."
+                "the passphrase; only reading the content needs it."
             ),
         )
         passphrase = None
         if encrypt:
             passphrase = st.text_input(
-                "Message passphrase", type="password", key=f"{media}_enc_pass"
+                "Payload passphrase", type="password", key=f"{media}_enc_pass"
             )
 
         # ---- live capacity readout
-        report = engine.estimate_capacity(cover, n_lsb, message, encrypt, issuer)
+        report = engine.estimate_capacity(
+            cover, n_lsb, payload_data, encrypt, issuer, kind, filename
+        )
         components.capacity_meter(report)
 
     # ---- action
@@ -160,7 +199,14 @@ def _encode_section(adapter: MediaAdapter, media: str) -> None:
     if keypair is None:
         blockers.append("generate or load a private key")
     if encrypt and not passphrase:
-        blockers.append("enter a message passphrase")
+        blockers.append("enter a payload passphrase")
+    if not payload_data:
+        blockers.append(
+            "choose a file to hide" if kind == payload_mod.KIND_FILE
+            else "enter a message"
+        )
+    if not report.fits:
+        blockers.append("reduce the payload or raise the LSB depth")
 
     if st.button(
         "Embed and sign", type="primary", key=f"{media}_embed", width="stretch"
@@ -169,23 +215,23 @@ def _encode_section(adapter: MediaAdapter, media: str) -> None:
             st.error("Cannot embed yet: " + ", ".join(blockers) + ".")
         else:
             _do_encode(
-                adapter, media, cover, n_lsb, message, issuer, stego_key,
-                keypair, start_mode, manual_offset, passphrase,
+                adapter, media, cover, n_lsb, payload_data, issuer, stego_key,
+                keypair, start_mode, manual_offset, passphrase, kind, filename,
             )
 
     _render_encode_output(adapter, media, cover, cover_bytes)
 
 
 def _do_encode(
-    adapter, media, cover, n_lsb, message, issuer, stego_key,
-    keypair, start_mode, manual_offset, passphrase,
+    adapter, media, cover, n_lsb, payload_data, issuer, stego_key,
+    keypair, start_mode, manual_offset, passphrase, kind, filename,
 ):
     """Run the embed and store the result in session state."""
     try:
         result = engine.encode(
             cover=cover,
             media_type=adapter.media_type,
-            message=message,
+            data=payload_data,
             issuer=issuer,
             n_lsb=n_lsb,
             stego_key=stego_key,
@@ -193,6 +239,8 @@ def _do_encode(
             start_mode=start_mode,
             manual_offset=int(manual_offset) if manual_offset is not None else None,
             passphrase=passphrase,
+            kind=kind,
+            filename=filename,
         )
     except engine.EncodeError as exc:
         st.error(str(exc), icon=":material/error:")
@@ -325,7 +373,7 @@ def _verify_section(adapter: MediaAdapter, media: str) -> None:
                 "LSB depth used at embedding", 1, 8, 2, key=f"{media}_ver_lsb"
             )
             passphrase = st.text_input(
-                "Message passphrase (if encrypted)",
+                "Payload passphrase (if encrypted)",
                 type="password",
                 key=f"{media}_ver_pass",
             )
@@ -388,12 +436,12 @@ def _render_verify_output(adapter: MediaAdapter, media: str, verify_bytes: bytes
         st.markdown("**Extracted payload**")
         components.payload_table(result.record)
 
-    if result.message is not None:
-        st.markdown("**Recovered message**")
-        st.code(result.message, language=None, wrap_lines=True)
-    elif result.record is not None and result.record.message_encrypted:
+    if result.payload is not None:
+        st.markdown("**Recovered payload**")
+        components.payload_view(result.payload, key_prefix=media)
+    elif result.record is not None and result.record.content_encrypted:
         st.caption(
-            "The message is encrypted and was not recovered. Signature and hash "
+            "The payload is encrypted and was not recovered. Signature and hash "
             "verification do not depend on it."
         )
 

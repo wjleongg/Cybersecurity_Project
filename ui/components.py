@@ -88,3 +88,65 @@ def stats_row(stats: dict, quality_key: str, quality_label: str) -> None:
     c3.metric("Max delta", stats["max_delta"])
     value = stats[quality_key]
     c4.metric(quality_label, "lossless" if value == float("inf") else f"{value:.1f} dB")
+
+
+def payload_view(extracted, key_prefix: str) -> None:
+    """Present an extracted payload according to what it actually is.
+
+    The brief asks the GUI to play or execute the payload, not merely print
+    it. A hidden PNG is drawn, a hidden WAV gets a player, a hidden video gets
+    a video element, and text is shown as text. Anything unrecognised falls
+    back to a download button, which is the one presentation that always
+    works.
+
+    A download is offered for every file payload regardless, because the
+    inline rendering is a convenience and the bytes are the actual artefact.
+    """
+    mime = extracted.mime or "application/octet-stream"
+
+    if extracted.is_text:
+        text = extracted.as_text()
+        if text is None:
+            st.warning("The payload is marked as text but is not valid UTF-8.")
+        else:
+            st.code(text, language=None, wrap_lines=True)
+        return
+
+    st.caption(
+        f"`{extracted.filename or 'payload'}` · {mime} · "
+        f"{extracted.size_bytes:,} bytes"
+    )
+
+    try:
+        if mime.startswith("image/"):
+            st.image(extracted.data, caption="Extracted payload", width="content")
+        elif mime.startswith("audio/"):
+            st.audio(extracted.data, format=mime)
+        elif mime.startswith("video/"):
+            st.video(extracted.data, format=mime)
+        elif mime.startswith("text/") or mime == "application/json":
+            text = extracted.as_text()
+            if text is None:
+                st.info("This payload is not valid UTF-8; download it instead.")
+            else:
+                st.code(text[:4000], language=None, wrap_lines=True)
+                if len(text) > 4000:
+                    st.caption("Truncated for display; download for the full file.")
+        else:
+            st.info(
+                "No inline preview for this file type. Download it to open it.",
+                icon=":material/description:",
+            )
+    except Exception as exc:
+        # A payload that survived extraction but will not render is still a
+        # successful extraction. Say so rather than showing a traceback.
+        st.warning(f"The payload extracted cleanly but could not be previewed: {exc}")
+
+    st.download_button(
+        "Download extracted payload",
+        data=extracted.data,
+        file_name=extracted.filename or "extracted_payload.bin",
+        mime=mime,
+        width="stretch",
+        key=f"{key_prefix}_download_payload",
+    )

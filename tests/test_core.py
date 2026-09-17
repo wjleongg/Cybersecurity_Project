@@ -13,6 +13,7 @@ from PIL import Image
 sys.path.insert(0, ".")
 
 from core import attacks, audio_stego, crypto_utils, engine, image_stego, location
+from core import payload as pm
 from core.engine import Verdict
 
 PASSED = []
@@ -71,13 +72,13 @@ def run_media(label, load_fn, cover_bytes, rebuild_attr, media_type, attack_set)
 
     # --- positive: derived location, plaintext message
     res = engine.encode(
-        cover, media_type, SHORT_MSG, "Team P1-4", 2, STEGO_KEY, kp.private_key
+        cover, media_type, SHORT_MSG.encode(), "Team P1-4", 2, STEGO_KEY, kp.private_key
     )
     stego_bytes = getattr(cover, rebuild_attr)(res.stego_carriers)
     stego = load_fn(stego_bytes)
     v = engine.verify(stego, media_type, 2, STEGO_KEY, kp.public_key)
     check(f"{label}: authentic after round trip", v.verdict == Verdict.AUTHENTIC, v.reason)
-    check(f"{label}: message recovered", v.message == SHORT_MSG)
+    check(f"{label}: message recovered", v.payload.as_text() == SHORT_MSG)
 
     # --- carriers actually survive file rebuild
     check(
@@ -87,18 +88,18 @@ def run_media(label, load_fn, cover_bytes, rebuild_attr, media_type, attack_set)
 
     # --- positive: encrypted message
     res_e = engine.encode(
-        cover, media_type, SHORT_MSG, "Team P1-4", 2, STEGO_KEY,
+        cover, media_type, SHORT_MSG.encode(), "Team P1-4", 2, STEGO_KEY,
         kp.private_key, passphrase="demo-pass",
     )
     st_e = load_fn(getattr(cover, rebuild_attr)(res_e.stego_carriers))
     v_e = engine.verify(st_e, media_type, 2, STEGO_KEY, kp.public_key, passphrase="demo-pass")
     check(f"{label}: encrypted payload authentic", v_e.verdict == Verdict.AUTHENTIC, v_e.reason)
-    check(f"{label}: encrypted message decrypted", v_e.message == SHORT_MSG)
+    check(f"{label}: encrypted message decrypted", v_e.payload.as_text() == SHORT_MSG)
 
     v_nopass = engine.verify(st_e, media_type, 2, STEGO_KEY, kp.public_key)
     check(
         f"{label}: authentic without passphrase, message withheld",
-        v_nopass.verdict == Verdict.AUTHENTIC and v_nopass.message is None,
+        v_nopass.verdict == Verdict.AUTHENTIC and v_nopass.payload is None,
     )
 
     v_badpass = engine.verify(
@@ -106,13 +107,13 @@ def run_media(label, load_fn, cover_bytes, rebuild_attr, media_type, attack_set)
     )
     check(
         f"{label}: wrong passphrase does not break verdict",
-        v_badpass.verdict == Verdict.AUTHENTIC and v_badpass.message is None,
+        v_badpass.verdict == Verdict.AUTHENTIC and v_badpass.payload is None,
     )
 
     # --- all LSB depths
     for n in range(1, 9):
         r = engine.encode(
-            cover, media_type, SHORT_MSG, "Team P1-4", n, STEGO_KEY, kp.private_key
+            cover, media_type, SHORT_MSG.encode(), "Team P1-4", n, STEGO_KEY, kp.private_key
         )
         s = load_fn(getattr(cover, rebuild_attr)(r.stego_carriers))
         vv = engine.verify(s, media_type, n, STEGO_KEY, kp.public_key)
@@ -120,12 +121,12 @@ def run_media(label, load_fn, cover_bytes, rebuild_attr, media_type, attack_set)
 
     # --- large payload
     r_big = engine.encode(
-        cover, media_type, LARGE_MSG, "Team P1-4", 3, STEGO_KEY, kp.private_key
+        cover, media_type, LARGE_MSG.encode(), "Team P1-4", 3, STEGO_KEY, kp.private_key
     )
     s_big = load_fn(getattr(cover, rebuild_attr)(r_big.stego_carriers))
     v_big = engine.verify(s_big, media_type, 3, STEGO_KEY, kp.public_key)
     check(f"{label}: large payload authentic", v_big.verdict == Verdict.AUTHENTIC, v_big.reason)
-    check(f"{label}: large message intact", v_big.message == LARGE_MSG)
+    check(f"{label}: large message intact", v_big.payload.as_text() == LARGE_MSG)
 
     # --- negative: wrong public key
     v_wrongkey = engine.verify(stego, media_type, 2, STEGO_KEY, other.public_key)
@@ -154,7 +155,7 @@ def run_media(label, load_fn, cover_bytes, rebuild_attr, media_type, attack_set)
     # --- negative: wrong start location
     manual = 5000 % cover.num_carriers
     r_manual = engine.encode(
-        cover, media_type, SHORT_MSG, "Team P1-4", 2, STEGO_KEY, kp.private_key,
+        cover, media_type, SHORT_MSG.encode(), "Team P1-4", 2, STEGO_KEY, kp.private_key,
         start_mode="manual", manual_offset=manual,
     )
     s_manual = load_fn(getattr(cover, rebuild_attr)(r_manual.stego_carriers))
@@ -207,12 +208,44 @@ def run_media(label, load_fn, cover_bytes, rebuild_attr, media_type, attack_set)
             f"got {v_att.verdict}, expected one of {expected}",
         )
 
+    # --- file payload: hide a small binary and get the exact bytes back
+    file_bytes = make_png(24, 24, seed=99)
+    r_file = engine.encode(
+        cover, media_type, file_bytes, "Team P1-4", 3, STEGO_KEY, kp.private_key,
+        kind=pm.KIND_FILE, filename="logo.png",
+    )
+    s_file = load_fn(getattr(cover, rebuild_attr)(r_file.stego_carriers))
+    v_file = engine.verify(s_file, media_type, 3, STEGO_KEY, kp.public_key)
+    check(f"{label}: file payload authentic", v_file.verdict == Verdict.AUTHENTIC, v_file.reason)
+    check(
+        f"{label}: file payload bytes identical",
+        v_file.payload is not None and v_file.payload.data == file_bytes,
+    )
+    check(
+        f"{label}: file payload metadata preserved",
+        v_file.payload.filename == "logo.png" and v_file.payload.mime == "image/png",
+    )
+
+    # --- encrypted file payload
+    r_efile = engine.encode(
+        cover, media_type, file_bytes, "Team P1-4", 3, STEGO_KEY, kp.private_key,
+        kind=pm.KIND_FILE, filename="logo.png", passphrase="demo-pass",
+    )
+    s_efile = load_fn(getattr(cover, rebuild_attr)(r_efile.stego_carriers))
+    v_efile = engine.verify(
+        s_efile, media_type, 3, STEGO_KEY, kp.public_key, passphrase="demo-pass"
+    )
+    check(
+        f"{label}: encrypted file payload round trip",
+        v_efile.verdict == Verdict.AUTHENTIC and v_efile.payload.data == file_bytes,
+    )
+
     # --- capacity refusal
     huge = "x" * (cover.num_carriers * 2)
-    cap = engine.estimate_capacity(cover, 1, huge, False)
+    cap = engine.estimate_capacity(cover, 1, huge.encode(), False)
     check(f"{label}: capacity report says it will not fit", not cap.fits)
     try:
-        engine.encode(cover, media_type, huge, "Team P1-4", 1, STEGO_KEY, kp.private_key)
+        engine.encode(cover, media_type, huge.encode(), "Team P1-4", 1, STEGO_KEY, kp.private_key)
         check(f"{label}: oversized payload refused", False, "no exception raised")
     except engine.EncodeError:
         check(f"{label}: oversized payload refused", True)

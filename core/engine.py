@@ -103,7 +103,7 @@ class VerifyResult:
     verdict: Verdict
     reason: str
     record: payload_mod.PayloadRecord | None = None
-    message: str | None = None
+    payload: payload_mod.ExtractedPayload | None = None
     checks: dict[str, Any] = field(default_factory=dict)
     start_index: int | None = None
     found_at: int | None = None
@@ -118,33 +118,32 @@ class VerifyResult:
 # --------------------------------------------------------------------------
 
 def estimate_capacity(
-    cover, n_lsb: int, message: str, encrypted: bool, issuer: str = "Team P1-4"
+    cover,
+    n_lsb: int,
+    data: bytes,
+    encrypted: bool,
+    issuer: str = "Team P1-4",
+    kind: str = payload_mod.KIND_TEXT,
+    filename: str = "",
 ) -> CapacityReport:
-    """Estimate whether a message will fit, before doing any work.
+    """Estimate whether a payload will fit, before doing any work.
 
-    The estimate builds a dummy record with the same shape as the real one so
-    that JSON overhead, base64 expansion and the signature are all counted.
-    Guessing from the message length alone would understate the requirement by
-    several hundred bytes.
+    The estimate builds a record with the same shape as the real one, so JSON
+    overhead, base64 expansion, the filename, the MIME type and the signature
+    are all counted. Sizing from the raw payload length alone would understate
+    the requirement by a few hundred bytes, and for a file payload by a third
+    again on top of that.
 
-    When encryption is on, the ciphertext length is calculated rather than
-    produced. This function runs on every rerun — every slider drag, every
-    keystroke — and a real encryption here would mean a PBKDF2 key derivation
-    each time, which is deliberately slow. AES-GCM does not expand the
-    plaintext, so the size is exactly derivable: salt, nonce and tag are fixed
-    overhead and base64 inflates by four bytes per three.
+    Nothing is actually encrypted here. This runs on every rerun — every
+    slider drag, every keystroke — and a real encryption would mean a PBKDF2
+    derivation each time, which is deliberately slow. AES-GCM does not expand
+    its plaintext, so the stored length is exactly derivable instead.
     """
-    if encrypted:
-        raw_len = (
-            crypto_utils.AES_SALT_LEN
-            + crypto_utils.AES_NONCE_LEN
-            + len(message.encode("utf-8"))
-            + 16  # GCM authentication tag
-        )
-        stand_in = "A" * (4 * ((raw_len + 2) // 3))
-    else:
-        stand_in = message
-
+    mime = (
+        payload_mod.TEXT_MIME
+        if kind == payload_mod.KIND_TEXT
+        else payload_mod.guess_mime(filename)
+    )
     probe = payload_mod.PayloadRecord(
         media_id="IMG-000000000000",
         media_type="image",
@@ -153,8 +152,11 @@ def estimate_capacity(
         nonce="0" * (payload_mod.NONCE_LEN * 2),
         issuer=issuer,
         n_lsb=n_lsb,
-        message=stand_in,
-        message_encrypted=encrypted,
+        payload_kind=kind,
+        filename=filename if kind == payload_mod.KIND_FILE else "",
+        mime=mime,
+        content=payload_mod.content_stand_in(data, kind, encrypted),
+        content_encrypted=encrypted,
     )
     payload_bytes = probe.to_json()
     total = container.total_size(len(payload_bytes))
@@ -173,7 +175,7 @@ def estimate_capacity(
 def encode(
     cover,
     media_type: str,
-    message: str,
+    data: bytes,
     issuer: str,
     n_lsb: int,
     stego_key: str,
@@ -181,6 +183,9 @@ def encode(
     start_mode: str = "derived",
     manual_offset: int | None = None,
     passphrase: str | None = None,
+    kind: str = payload_mod.KIND_TEXT,
+    filename: str = "",
+    mime: str | None = None,
 ) -> EncodeResult:
     """Hash, build, sign and embed. Returns the modified carriers.
 
@@ -200,24 +205,29 @@ def encode(
         media_type=media_type,
         cover_hash_hex=cover_hash,
         n_lsb=n_lsb,
-        message=message,
+        data=data,
         issuer=issuer,
+        kind=kind,
+        filename=filename,
+        mime=mime,
         passphrase=passphrase,
     )
     payload_bytes = record.to_json()
 
     signature = crypto_utils.sign(
         private_key,
-        container.signed_region(container.VERSION, 
-                                container.FLAG_ENCRYPTED if record.message_encrypted else 0,
-                                payload_bytes),
+        container.signed_region(
+            container.VERSION,
+            container.FLAG_ENCRYPTED if record.content_encrypted else 0,
+            payload_bytes,
+        ),
     )
 
     blob = container.build(
         magic=location.derive_magic(stego_key),
         payload=payload_bytes,
         signature=signature,
-        encrypted=record.message_encrypted,
+        encrypted=record.content_encrypted,
     )
 
     capacity = CapacityReport(
@@ -363,7 +373,7 @@ def verify(
 
     checks["Container at start location"] = "found"
     checks["Payload size"] = f"{len(parsed.payload):,} bytes"
-    checks["Message encrypted"] = parsed.is_encrypted
+    checks["Content encrypted"] = parsed.is_encrypted
 
     # Step 2: does the signature hold?
     sig_ok = crypto_utils.verify_signature(
@@ -416,13 +426,15 @@ def verify(
             found_at=found_at,
         )
 
-    # Step 5: recover the message, if we can.
-    message = None
+    # Step 5: recover the payload content, if we can.
+    extracted = None
     try:
-        message = payload_mod.read_message(record, passphrase)
-        checks["Message"] = "recovered"
+        extracted = payload_mod.read_payload(record, passphrase)
+        checks["Payload content"] = (
+            f"recovered, {extracted.size_bytes:,} bytes ({extracted.mime})"
+        )
     except (ValueError, crypto_utils.DecryptionError) as exc:
-        checks["Message"] = f"not recovered ({exc})"
+        checks["Payload content"] = f"not recovered ({exc})"
 
     return VerifyResult(
         verdict=Verdict.AUTHENTIC,
@@ -432,7 +444,7 @@ def verify(
             "holder of the corresponding private key."
         ),
         record=record,
-        message=message,
+        payload=extracted,
         checks=checks,
         start_index=start,
         found_at=found_at,
