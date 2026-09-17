@@ -446,6 +446,37 @@ def _verify_section(adapter: MediaAdapter, media: str) -> None:
                 ),
             )
 
+        st.divider()
+        rc1, rc2 = st.columns([2, 1])
+        with rc1:
+            enforce_freshness = st.checkbox(
+                "Enforce freshness window",
+                value=False,
+                key=f"{media}_ver_freshness",
+                help=(
+                    "Reject a payload issued longer ago than the window below, "
+                    "on top of the always-on check for a payload already "
+                    "verified before. Neither check affects the signature or "
+                    "hash outcome — both run only once a file already looks "
+                    "authentic."
+                ),
+            )
+            max_age_minutes = None
+            if enforce_freshness:
+                max_age_minutes = st.number_input(
+                    "Max payload age (minutes)",
+                    min_value=1,
+                    value=5,
+                    step=1,
+                    key=f"{media}_ver_max_age",
+                )
+        with rc2:
+            st.write("")
+            st.write("")
+            if st.button("Reset replay log", key=f"{media}_ver_replay_reset"):
+                state.get_replay_guard().reset()
+                st.success("Replay log cleared.")
+
     if st.button("Verify", type="primary", key=f"{media}_verify_go", width="stretch"):
         result = engine.verify(
             cover=subject,
@@ -457,6 +488,10 @@ def _verify_section(adapter: MediaAdapter, media: str) -> None:
             manual_offset=int(manual_offset) if manual_offset is not None else None,
             passphrase=passphrase or None,
             scan_on_miss=scan,
+            replay_guard=state.get_replay_guard(),
+            max_age_seconds=(
+                int(max_age_minutes) * 60 if max_age_minutes is not None else None
+            ),
         )
         state.put(media, "verify_result", result)
 
@@ -476,6 +511,13 @@ def _verify_section(adapter: MediaAdapter, media: str) -> None:
             )
         else:
             state.put(media, "ledger_result", None)
+
+    st.caption(
+        "Replay check: verifying the exact same untouched file a second time "
+        "reports Replay Detected — no tampering needed to demonstrate it, "
+        "since a signature and a hash alone cannot tell a resubmitted file "
+        "from a fresh one."
+    )
 
     _render_verify_output(adapter, media, verify_bytes)
 

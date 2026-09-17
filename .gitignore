@@ -4,10 +4,10 @@ __pycache__/
 .DS_Store
 .streamlit/secrets.toml
 .streamlit/secrets.toml.bak
- 
+.env
 
 keys/*private*.pem
 *.key
-.streamlit/secrets.toml
 
-.env
+# Runtime replay-detection log, not source.
+replay_log.json

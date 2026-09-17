@@ -19,6 +19,7 @@ _VERDICT_STYLE = {
     Verdict.PAYLOAD_MISSING: ("#854F0B", "#FAEEDA", "search-off"),
     Verdict.WRONG_START_LOCATION: ("#854F0B", "#FAEEDA", "map-pin-off"),
     Verdict.CANNOT_VERIFY: ("#854F0B", "#FAEEDA", "help"),
+    Verdict.REPLAY_DETECTED: ("#A32D2D", "#FCEBEB", "history"),
 }
 
 

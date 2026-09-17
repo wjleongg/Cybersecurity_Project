@@ -5,8 +5,9 @@ a small duck-typed interface — `carriers`, `num_carriers`, `stable_hash_input`
 — which both ImageCover and AudioCover satisfy. Adding video later would mean
 writing one more adapter, not touching the verification logic.
 
-The verdict vocabulary is fixed by the brief. Every path through verification
-ends at exactly one of these, with a reason attached:
+The brief's verdict vocabulary is a "such as" list, not a closed one. Every
+path through verification ends at exactly one of these, with a reason
+attached:
 
     AUTHENTIC             signature valid, hash matches, nothing wrong
     TAMPERED              signature valid, but the media hash no longer matches
@@ -14,6 +15,12 @@ ends at exactly one of these, with a reason attached:
     PAYLOAD_MISSING       no container anywhere in this file for this key
     WRONG_START_LOCATION  a container exists, but not where we looked
     CANNOT_VERIFY         we could not complete the check (bad input, no key)
+    REPLAY_DETECTED       genuine and unaltered, but already seen or too old
+
+REPLAY_DETECTED only applies when the caller opts in with a `replay_guard`
+(see `core/replay_guard.py`) — signature and hash verification never depend
+on it, so passing nothing preserves the original six-verdict behaviour
+exactly.
 """
 
 from dataclasses import dataclass, field
@@ -23,6 +30,7 @@ from typing import Any
 import numpy as np
 
 from . import bitops, container, crypto_utils, location, payload as payload_mod
+from .replay_guard import ReplayGuard
 
 
 class Verdict(str, Enum):
@@ -34,6 +42,7 @@ class Verdict(str, Enum):
     PAYLOAD_MISSING = "Payload Missing"
     WRONG_START_LOCATION = "Wrong Start Location"
     CANNOT_VERIFY = "Cannot Verify"
+    REPLAY_DETECTED = "Replay Detected"
 
 
 # Severity ordering used by the GUI to pick a colour.
@@ -44,6 +53,7 @@ VERDICT_TONE = {
     Verdict.PAYLOAD_MISSING: "warning",
     Verdict.WRONG_START_LOCATION: "warning",
     Verdict.CANNOT_VERIFY: "warning",
+    Verdict.REPLAY_DETECTED: "danger",
 }
 
 
@@ -294,6 +304,8 @@ def verify(
     manual_offset: int | None = None,
     passphrase: str | None = None,
     scan_on_miss: bool = True,
+    replay_guard: ReplayGuard | None = None,
+    max_age_seconds: int | None = None,
 ) -> VerifyResult:
     """Locate, extract, authenticate and return a verdict.
 
@@ -301,6 +313,13 @@ def verify(
     ordering is the point: a signature check on a payload you could not find
     is meaningless, and a hash comparison on a payload whose signature failed
     tells you nothing about authenticity.
+
+    `replay_guard` is opt-in. Leaving it `None` (the default) reproduces the
+    original six-verdict behaviour exactly — every existing caller that
+    doesn't know about replay detection is unaffected. Passing a guard adds
+    a check, after signature and hash both pass, for whether this exact
+    payload (by nonce) has been verified before, or is older than
+    `max_age_seconds` allows.
     """
     checks: dict[str, Any] = {}
 
@@ -432,7 +451,25 @@ def verify(
             found_at=found_at,
         )
 
-    # Step 5: recover the payload content, if we can.
+    # Step 5: has this exact payload been seen before, or has it gone stale?
+    # Only reached once the file is otherwise indistinguishable from
+    # authentic, so a tampered file is still reported as Tampered, never
+    # masked by a replay finding.
+    if replay_guard is not None:
+        outcome = replay_guard.check(record.nonce, record.timestamp, max_age_seconds)
+        checks["Replay check"] = outcome.reason or "first time seen"
+        if not outcome.ok:
+            return VerifyResult(
+                verdict=Verdict.REPLAY_DETECTED,
+                reason=outcome.reason,
+                record=record,
+                checks=checks,
+                start_index=start,
+                found_at=found_at,
+            )
+        replay_guard.record(record.nonce, record.timestamp)
+
+    # Step 6: recover the payload content, if we can.
     extracted = None
     try:
         extracted = payload_mod.read_payload(record, passphrase)

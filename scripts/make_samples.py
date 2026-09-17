@@ -31,6 +31,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from core import attacks, audio_stego, crypto_utils, engine, image_stego, video_stego  # noqa: E402
 from core import payload as pm  # noqa: E402
+from core.replay_guard import ReplayGuard  # noqa: E402
 from ui import messages  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -331,6 +332,18 @@ def run_media_cases(log, media_type, cover_bytes, load, rebuild_attr, attack_set
             "media": media_type, "case": "N8 payload larger than capacity",
             "expected": "refused", "actual": "refused", "match": "yes", "note": str(exc),
         })
+
+    # NEGATIVE 9: the same untouched, legitimately signed file presented twice.
+    # No tampering involved — signature and hash both still pass, which is the
+    # point: they alone cannot tell a resubmitted file from a fresh one.
+    replay_guard = ReplayGuard(path=None)
+    engine.verify(load(stego1), media_type, 2, STEGO_KEY, kp.public_key, replay_guard=replay_guard)
+    v = engine.verify(
+        load(stego1), media_type, 2, STEGO_KEY, kp.public_key, replay_guard=replay_guard
+    )
+    log.add(
+        media_type, "N9 same stego file verified twice (replay)", "Replay Detected", v,
+    )
 
     # Quality numbers for the positive case
     if media_type == "image":

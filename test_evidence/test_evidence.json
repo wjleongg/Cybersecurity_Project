@@ -96,6 +96,14 @@
     "note": "Payload needs 2,883,352 bits but this cover holds 1,440,000 at 1 LSB(s). Short by 1,443,352 bits."
   },
   {
+    "media": "image",
+    "case": "N9 same stego file verified twice (replay)",
+    "expected": "Replay Detected",
+    "actual": "Replay Detected",
+    "match": "yes",
+    "note": "This exact payload (nonce 89f822aa09fee16faff1cf02ef76dcd6) was already verified at 2026-09-17T10:18:38+00:00. A genuine sender does not resubmit the same signed file."
+  },
+  {
     "media": "audio",
     "case": "P1 short payload, derived location",
     "expected": "Authentic",
@@ -192,6 +200,14 @@
     "note": "Payload needs 885,352 bits but this cover holds 441,000 at 1 LSB(s). Short by 444,352 bits."
   },
   {
+    "media": "audio",
+    "case": "N9 same stego file verified twice (replay)",
+    "expected": "Replay Detected",
+    "actual": "Replay Detected",
+    "match": "yes",
+    "note": "This exact payload (nonce 06d304037d8602286055d2db22938762) was already verified at 2026-09-17T10:18:39+00:00. A genuine sender does not resubmit the same signed file."
+  },
+  {
     "media": "video",
     "case": "P1 short payload, derived location",
     "expected": "Authentic",
@@ -286,5 +302,13 @@
     "actual": "refused",
     "match": "yes",
     "note": "Payload needs 435,352 bits but this cover holds 216,000 at 1 LSB(s). Short by 219,352 bits."
+  },
+  {
+    "media": "video",
+    "case": "N9 same stego file verified twice (replay)",
+    "expected": "Replay Detected",
+    "actual": "Replay Detected",
+    "match": "yes",
+    "note": "This exact payload (nonce eb3e9e0984444a19b75f3cd1ae32a0d3) was already verified at 2026-09-17T10:18:39+00:00. A genuine sender does not resubmit the same signed file."
   }
 ]

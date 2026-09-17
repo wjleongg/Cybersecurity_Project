@@ -15,6 +15,7 @@ sys.path.insert(0, ".")
 from core import attacks, audio_stego, crypto_utils, engine, image_stego, location, video_stego
 from core import payload as pm
 from core.engine import Verdict
+from core.replay_guard import ReplayGuard
 
 PASSED = []
 FAILED = []
@@ -261,6 +262,96 @@ def run_media(label, load_fn, cover_bytes, rebuild_attr, media_type, attack_set)
         check(f"{label}: oversized payload refused", True)
 
 
+def run_replay_tests():
+    """Replay/substitution detection is opt-in: no guard, no change in
+    behaviour; a guard turns nonce reuse and staleness into a new verdict,
+    without ever overriding a Tampered/Signature Invalid finding.
+    """
+    print("\n=== replay detection ===")
+    kp = crypto_utils.generate_keypair()
+    cover = image_stego.load_image(make_png())
+
+    res = engine.encode(
+        cover, "image", SHORT_MSG.encode(), "Team P1-4", 2, STEGO_KEY, kp.private_key
+    )
+    stego = image_stego.load_image(cover.to_png_bytes(res.stego_carriers))
+
+    # --- no guard passed: behaviour is exactly the pre-existing six-verdict path
+    v_no_guard = engine.verify(stego, "image", 2, STEGO_KEY, kp.public_key)
+    check(
+        "replay: no guard passed -> unaffected, Authentic",
+        v_no_guard.verdict == Verdict.AUTHENTIC,
+        v_no_guard.reason,
+    )
+
+    # --- first verify with a guard: fresh nonce, Authentic
+    guard = ReplayGuard(path=None)
+    v_first = engine.verify(stego, "image", 2, STEGO_KEY, kp.public_key, replay_guard=guard)
+    check(
+        "replay: first verify with guard -> Authentic",
+        v_first.verdict == Verdict.AUTHENTIC,
+        v_first.reason,
+    )
+
+    # --- same untouched file, same guard, verified again -> Replay Detected
+    v_second = engine.verify(stego, "image", 2, STEGO_KEY, kp.public_key, replay_guard=guard)
+    check(
+        "replay: same file verified twice -> Replay Detected",
+        v_second.verdict == Verdict.REPLAY_DETECTED,
+        v_second.verdict,
+    )
+
+    # --- a different guard has no memory of the first guard's history
+    other_guard = ReplayGuard(path=None)
+    v_isolated = engine.verify(
+        stego, "image", 2, STEGO_KEY, kp.public_key, replay_guard=other_guard
+    )
+    check(
+        "replay: independent guard -> unaffected, Authentic",
+        v_isolated.verdict == Verdict.AUTHENTIC,
+        v_isolated.reason,
+    )
+
+    # --- freshness window: a window of 0 seconds is always already exceeded
+    stale_guard = ReplayGuard(path=None)
+    v_stale = engine.verify(
+        stego, "image", 2, STEGO_KEY, kp.public_key,
+        replay_guard=stale_guard, max_age_seconds=0,
+    )
+    check(
+        "replay: freshness window of 0s -> Replay Detected (stale)",
+        v_stale.verdict == Verdict.REPLAY_DETECTED,
+        v_stale.verdict,
+    )
+
+    # --- reset clears history
+    guard.reset()
+    v_after_reset = engine.verify(stego, "image", 2, STEGO_KEY, kp.public_key, replay_guard=guard)
+    check(
+        "replay: verify again after reset -> Authentic",
+        v_after_reset.verdict == Verdict.AUTHENTIC,
+        v_after_reset.reason,
+    )
+
+    # --- ordering: a tampered file is Tampered, never masked as a replay,
+    # even when the guard has already seen this exact nonce before.
+    seen_guard = ReplayGuard(path=None)
+    engine.verify(stego, "image", 2, STEGO_KEY, kp.public_key, replay_guard=seen_guard)
+    ctx = {"start": res.start_index, "n_lsb": 2}
+    attacked, _ = attacks.IMAGE_ATTACKS["Brighten, preserving payload planes"](
+        res.stego_carriers, ctx
+    )
+    tampered = image_stego.load_image(cover.to_png_bytes(attacked))
+    v_tampered = engine.verify(
+        tampered, "image", 2, STEGO_KEY, kp.public_key, replay_guard=seen_guard
+    )
+    check(
+        "replay: tampered file -> Tampered, not masked by replay check",
+        v_tampered.verdict == Verdict.TAMPERED,
+        v_tampered.verdict,
+    )
+
+
 def main():
     print("Testing core modules")
 
@@ -335,6 +426,8 @@ def main():
             "derived", STEGO_KEY, "video", 30 * 4608, 2, frame_count=30
         ) == start1,
     )
+
+    run_replay_tests()
 
     print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
     if FAILED:
