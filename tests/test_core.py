@@ -12,7 +12,7 @@ from PIL import Image
 
 sys.path.insert(0, ".")
 
-from core import attacks, audio_stego, crypto_utils, engine, image_stego, location
+from core import attacks, audio_stego, crypto_utils, engine, image_stego, location, video_stego
 from core import payload as pm
 from core.engine import Verdict
 from core.replay_guard import ReplayGuard
@@ -36,6 +36,16 @@ def make_png(w=160, h=120, seed=1) -> bytes:
     buf = io.BytesIO()
     Image.fromarray(arr, "RGB").save(buf, format="PNG")
     return buf.getvalue()
+
+
+def make_avi(w=64, h=48, n_frames=8, fps=8.0, seed=3) -> bytes:
+    rng = np.random.default_rng(seed)
+    frames = rng.integers(0, 256, size=(n_frames, h, w, 3), dtype=np.uint8)
+    cover = video_stego.VideoCover(
+        carriers=frames.reshape(-1).copy(), frame_count=n_frames,
+        height=h, width=w, channels=3, fps=fps,
+    )
+    return cover.to_avi_bytes()
 
 
 def make_wav(seconds=1.0, rate=16000, channels=1, width=2, seed=2) -> bytes:
@@ -353,6 +363,10 @@ def main():
         "AUDIO", audio_stego.load_audio, make_wav(), "to_wav_bytes", "audio",
         attacks.AUDIO_ATTACKS,
     )
+    run_media(
+        "VIDEO", video_stego.load_video, make_avi(), "to_avi_bytes", "video",
+        attacks.VIDEO_ATTACKS,
+    )
 
     print("\n=== format guards ===")
     try:
@@ -373,6 +387,12 @@ def main():
     except audio_stego.AudioFormatError:
         check("PNG-as-audio rejected", True)
 
+    try:
+        video_stego.load_video(make_wav())
+        check("WAV-as-video rejected", False)
+    except video_stego.VideoFormatError:
+        check("WAV-as-video rejected", True)
+
     print("\n=== start location determinism ===")
     a = location.derive_start(STEGO_KEY, "image", 100000, 2)
     b = location.derive_start(STEGO_KEY, "image", 100000, 2)
@@ -384,6 +404,27 @@ def main():
     check(
         "different key gives different magic",
         location.derive_magic(STEGO_KEY) != location.derive_magic(WRONG_STEGO_KEY),
+    )
+
+    print("\n=== video frame-index derivation ===")
+    fa = location.derive_frame_index(STEGO_KEY, "video", 30, 2)
+    fb = location.derive_frame_index(STEGO_KEY, "video", 30, 2)
+    check("same inputs give same frame", fa == fb)
+    check("frame index is in range", 0 <= fa < 30)
+
+    start1 = location.derive_video_start(STEGO_KEY, "video", 30, 4608, 2)
+    start2 = location.derive_video_start(STEGO_KEY, "video", 30, 4608, 2)
+    check("video start is deterministic", start1 == start2)
+    check("video start is in range", 0 <= start1 < 30 * 4608)
+    check(
+        "video start matches frame*per_frame + per-carrier offset",
+        start1 == fa * 4608 + location.derive_start(STEGO_KEY, "video", 4608, 2),
+    )
+    check(
+        "resolve_start with frame_count matches derive_video_start",
+        location.resolve_start(
+            "derived", STEGO_KEY, "video", 30 * 4608, 2, frame_count=30
+        ) == start1,
     )
 
     run_replay_tests()

@@ -5,4 +5,9 @@ streamlit>=1.40
 numpy>=1.24
 pillow>=10.0
 cryptography>=42.0
-requests>=2.31
+requests>=2.31          # ledger.py: PostgREST calls to the Supabase database
+
+# Video cover objects (core/video_stego.py). opencv-python-headless bundles
+# its own FFmpeg read/write plugin, so no separate system `ffmpeg` install is
+# required to run this project -- see the Formats section of README.md.
+opencv-python-headless>=4.9

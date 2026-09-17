@@ -101,7 +101,7 @@
     "expected": "Replay Detected",
     "actual": "Replay Detected",
     "match": "yes",
-    "note": "This exact payload (nonce 1c2d079f0a1abadbd805c331f2f24271) was already verified at 2026-09-17T08:53:07+00:00. A genuine sender does not resubmit the same signed file."
+    "note": "This exact payload (nonce 89f822aa09fee16faff1cf02ef76dcd6) was already verified at 2026-09-17T10:18:38+00:00. A genuine sender does not resubmit the same signed file."
   },
   {
     "media": "audio",
@@ -205,6 +205,110 @@
     "expected": "Replay Detected",
     "actual": "Replay Detected",
     "match": "yes",
-    "note": "This exact payload (nonce 97ae04c1294dfd1bf106ca9e127b9152) was already verified at 2026-09-17T08:53:07+00:00. A genuine sender does not resubmit the same signed file."
+    "note": "This exact payload (nonce 06d304037d8602286055d2db22938762) was already verified at 2026-09-17T10:18:39+00:00. A genuine sender does not resubmit the same signed file."
+  },
+  {
+    "media": "video",
+    "case": "P1 short payload, derived location",
+    "expected": "Authentic",
+    "actual": "Authentic",
+    "match": "yes",
+    "note": "Signature verified against the loaded public key and the media hash matches the signed value. This file is intact and was issued by the holder of the corresponding private key."
+  },
+  {
+    "media": "video",
+    "case": "P2 large payload at 3 LSB",
+    "expected": "Authentic",
+    "actual": "Authentic",
+    "match": "yes",
+    "note": "Signature verified against the loaded public key and the media hash matches the signed value. This file is intact and was issued by the holder of the corresponding private key."
+  },
+  {
+    "media": "video",
+    "case": "P3 encrypted custom payload",
+    "expected": "Authentic",
+    "actual": "Authentic",
+    "match": "yes",
+    "note": "message recovered: True"
+  },
+  {
+    "media": "video",
+    "case": "P4 hidden PNG file payload",
+    "expected": "Authentic",
+    "actual": "Authentic",
+    "match": "yes",
+    "note": "7,283 byte PNG embedded; bytes identical on extraction: True"
+  },
+  {
+    "media": "video",
+    "case": "N1 media edited after signing",
+    "expected": "Tampered",
+    "actual": "Tampered",
+    "match": "yes",
+    "note": "Brightened the image, leaving the low 2 bit(s) untouched"
+  },
+  {
+    "media": "video",
+    "case": "N2 verified with a different public key",
+    "expected": "Signature Invalid",
+    "actual": "Signature Invalid",
+    "match": "yes",
+    "note": "A payload was extracted, but its signature does not verify against the loaded public key. Either the payload was altered after signing, or it was signed by a different party."
+  },
+  {
+    "media": "video",
+    "case": "N3 embedded payload corrupted",
+    "expected": "Signature Invalid",
+    "actual": "Signature Invalid",
+    "match": "yes",
+    "note": "Randomised 64 carriers inside the signed payload"
+  },
+  {
+    "media": "video",
+    "case": "N4 unprotected cover object",
+    "expected": "Payload Missing",
+    "actual": "Payload Missing",
+    "match": "yes",
+    "note": "No container for this stego key was found anywhere in the file. Either nothing was embedded, the stego key is wrong, or the LSB depth does not match the one used at embedding."
+  },
+  {
+    "media": "video",
+    "case": "N5 wrong stego key",
+    "expected": "Payload Missing",
+    "actual": "Payload Missing",
+    "match": "yes",
+    "note": "No container for this stego key was found anywhere in the file. Either nothing was embedded, the stego key is wrong, or the LSB depth does not match the one used at embedding."
+  },
+  {
+    "media": "video",
+    "case": "N6 embedded manually, verified with derived offset",
+    "expected": "Wrong Start Location",
+    "actual": "Wrong Start Location",
+    "match": "yes",
+    "note": "embedded at carrier 50,000"
+  },
+  {
+    "media": "video",
+    "case": "N7 wrong LSB depth at verification",
+    "expected": "Payload Missing",
+    "actual": "Payload Missing",
+    "match": "yes",
+    "note": "No container for this stego key was found anywhere in the file. Either nothing was embedded, the stego key is wrong, or the LSB depth does not match the one used at embedding."
+  },
+  {
+    "media": "video",
+    "case": "N8 payload larger than capacity",
+    "expected": "refused",
+    "actual": "refused",
+    "match": "yes",
+    "note": "Payload needs 435,352 bits but this cover holds 216,000 at 1 LSB(s). Short by 219,352 bits."
+  },
+  {
+    "media": "video",
+    "case": "N9 same stego file verified twice (replay)",
+    "expected": "Replay Detected",
+    "actual": "Replay Detected",
+    "match": "yes",
+    "note": "This exact payload (nonce eb3e9e0984444a19b75f3cd1ae32a0d3) was already verified at 2026-09-17T10:18:39+00:00. A genuine sender does not resubmit the same signed file."
   }
 ]

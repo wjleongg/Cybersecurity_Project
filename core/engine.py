@@ -256,6 +256,7 @@ def encode(
         num_carriers=cover.num_carriers,
         n_lsb=n_lsb,
         manual_offset=manual_offset,
+        frame_count=getattr(cover, "frame_count", None),
     )
 
     stego = bitops.embed_bits(
@@ -345,6 +346,7 @@ def verify(
             num_carriers=cover.num_carriers,
             n_lsb=n_lsb,
             manual_offset=manual_offset,
+            frame_count=getattr(cover, "frame_count", None),
         )
     except ValueError as exc:
         return VerifyResult(
@@ -354,6 +356,10 @@ def verify(
         )
 
     checks["Start location"] = f"{start:,} ({start_mode})"
+    frame_count = getattr(cover, "frame_count", None)
+    if frame_count:
+        per_frame = cover.num_carriers // frame_count
+        checks["Start frame"] = f"{start // per_frame:,} of {frame_count:,}"
 
     # Step 1: is there a container where we expect one?
     try:

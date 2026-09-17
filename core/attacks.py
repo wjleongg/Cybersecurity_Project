@@ -144,3 +144,5 @@ AUDIO_ATTACKS = {
     ),
     "Strip the LSB planes": lambda c, ctx: strip_lsb_planes(c, ctx["n_lsb"]),
 }
+
+VIDEO_ATTACKS = IMAGE_ATTACKS
