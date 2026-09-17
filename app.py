@@ -88,6 +88,17 @@ The trade-off: a change confined to the embedding planes does not move the
 hash. Such a change is caught by the signature or the header CRC instead, and
 reported as Signature Invalid or Payload Missing.
 
+#### How replay detection works
+
+A valid signature and a matching hash only prove a payload is genuine and
+unaltered — neither says anything about whether *this exact file* has been
+presented before. Every payload already carries a random nonce and an
+issue timestamp; the verifier keeps a log of nonces it has already accepted
+and, optionally, rejects anything older than a configured window. Verifying
+the same untouched, legitimately signed file twice produces Authentic the
+first time and Replay Detected the second — no tampering required, because
+the whole point is that a replay attack needs none.
+
 #### Verdicts
 
 | Verdict | Meaning |
@@ -98,6 +109,7 @@ reported as Signature Invalid or Payload Missing.
 | Payload Missing | No container for this stego key anywhere in the file |
 | Wrong Start Location | A container exists, but not where the verifier looked |
 | Cannot Verify | The check could not be completed — missing key or unreadable input |
+| Replay Detected | Signature and hash are both fine, but this exact payload was already verified before, or is older than the allowed freshness window |
 
 #### Known limitations
 

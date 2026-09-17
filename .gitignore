@@ -5,3 +5,6 @@ __pycache__/
 
 keys/*private*.pem
 *.key
+
+# Runtime replay-detection log, not source.
+replay_log.json

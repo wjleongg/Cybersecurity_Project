@@ -12,9 +12,9 @@ an Ed25519 private key, and write payload plus signature into the LSB planes
 starting at a location derived from a shared secret.
 
 **Verify** — recover the start location, extract the container, check the
-signature with the public key, recompute the media hash, and return one of six
-verdicts: Authentic, Tampered, Signature Invalid, Payload Missing, Wrong Start
-Location, or Cannot Verify.
+signature with the public key, recompute the media hash, and return one of
+seven verdicts: Authentic, Tampered, Signature Invalid, Payload Missing, Wrong
+Start Location, Cannot Verify, or Replay Detected.
 
 ## Setup
 
@@ -36,7 +36,7 @@ python -m scripts.make_samples
 ```
 
 This writes a cover PNG and WAV, protected and tampered versions of each, a
-demo keypair, and `test_evidence/test_evidence.md` recording all 22 cases and
+demo keypair, and `test_evidence/test_evidence.md` recording all 26 cases and
 the verdict each produced. It exits non-zero if any case gives an unexpected
 verdict, so it doubles as a regression check.
 
@@ -46,9 +46,9 @@ verdict, so it doubles as a regression check.
 python -m tests.test_core
 ```
 
-69 assertions across both media types: round trips at every LSB depth from 1
-to 8, wrap-around embedding, hash stability, all six verdicts, format
-rejection, and start-location determinism.
+84 assertions across both media types: round trips at every LSB depth from 1
+to 8, wrap-around embedding, hash stability, all seven verdicts, format
+rejection, start-location determinism, and replay/freshness detection.
 
 ## Using the tool
 
@@ -88,6 +88,12 @@ underneath.
 Leave "scan the file if nothing is found where expected" on. It is what lets
 the tool distinguish Wrong Start Location from Payload Missing.
 
+Verifying the exact same untouched file twice reports Replay Detected the
+second time — that check runs unconditionally, after the signature and hash
+both pass, and needs no tampering to demonstrate. "Enforce freshness window"
+additionally rejects a payload older than a chosen number of minutes. "Reset
+replay log" clears the history, for re-running the demo from a clean state.
+
 ## Repository layout
 
 ```
@@ -102,6 +108,7 @@ core/
   audio_stego.py           WAV loading, carriers, rebuild, SNR
   engine.py                Encode/verify orchestration, verdict logic
   attacks.py               Tamper simulation for negative cases
+  replay_guard.py          Nonce reuse and freshness checking (opt-in)
 ui/
   state.py                 Session state across Streamlit reruns
   components.py            Verdict block, capacity meter, tables
@@ -169,6 +176,23 @@ payload, so it verifies without the passphrase. Encryption protects only the
 message field. A recipient without the passphrase can still confirm the file
 is authentic and untampered; they simply cannot read the message.
 
+**Replay/substitution detection (innovation).** A valid signature and a
+matching hash prove a payload is genuine and unaltered — neither says whether
+this exact file has been presented before, or how long ago it was issued. An
+attacker who captures a legitimately signed stego file can resubmit it later
+and, without this check, the tool would still say Authentic. Every payload
+already carries a random nonce and an ISO-8601 issue timestamp
+(`payload.py`); `core/replay_guard.py` is what actually reads them back: a
+verifier keeps a small log of nonces it has already accepted and, optionally,
+rejects anything older than a configured freshness window, surfaced as the
+seventh verdict, Replay Detected. The check is opt-in — `engine.verify()`
+only runs it when handed a `ReplayGuard`, so every pre-existing call site
+(the automated tests, the sample/evidence generator) is unaffected and the
+original six-verdict behaviour is preserved exactly when no guard is passed.
+It needs no new tampering code to demonstrate: verifying the same untouched
+file twice is itself the attack, which is the point — a signature and a hash
+alone cannot tell a resubmitted file from a fresh one.
+
 ## Limitations
 
 - LSB replacement is fragile by design. Re-encoding, resampling or lossy
@@ -195,3 +219,8 @@ verification.
 
 `keys/other_party_public_key.pem` is an unrelated public key, kept for the
 wrong-key negative case.
+
+`replay_log.json`, created at the project root the first time the GUI's
+verify action runs, holds the replay-detection history (nonce → first-seen
+time). It is runtime state, not source, and is excluded in `.gitignore`.
+Delete it, or use the GUI's "Reset replay log" button, to start a demo fresh.

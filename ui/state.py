@@ -12,9 +12,18 @@ one keypair signs both media types, and duplicating it would let the two tabs
 drift apart.
 """
 
+from pathlib import Path
+
 import streamlit as st
 
+from core.replay_guard import ReplayGuard
+
 MEDIA_TYPES = ("image", "audio")
+
+# One file, shared by both media tabs: a replayed nonce should be caught
+# regardless of which tab re-verifies it. Runtime state, not source — see
+# .gitignore.
+REPLAY_LOG_PATH = Path(__file__).resolve().parent.parent / "replay_log.json"
 
 # Results that must be cleared when a new file is uploaded, so a verdict from
 # the previous file never sits on screen next to the current one.
@@ -34,6 +43,7 @@ def init() -> None:
     st.session_state.setdefault("public_key", None)
     st.session_state.setdefault("public_key_source", None)
     st.session_state.setdefault("stego_key", "")
+    st.session_state.setdefault("replay_guard", None)
 
     for media in MEDIA_TYPES:
         st.session_state.setdefault(f"{media}:cover_bytes", None)
@@ -42,6 +52,19 @@ def init() -> None:
         st.session_state.setdefault(f"{media}:verify_name", None)
         for key in _DERIVED_KEYS:
             st.session_state.setdefault(f"{media}:{key}", None)
+
+
+def get_replay_guard() -> ReplayGuard:
+    """One shared, disk-backed guard per process.
+
+    Disk-backed rather than session-only so the demo can show a replay still
+    being caught after the app is restarted, not just within one browser tab.
+    """
+    guard = st.session_state.get("replay_guard")
+    if guard is None:
+        guard = ReplayGuard(REPLAY_LOG_PATH)
+        st.session_state["replay_guard"] = guard
+    return guard
 
 
 def get(media: str, key: str):

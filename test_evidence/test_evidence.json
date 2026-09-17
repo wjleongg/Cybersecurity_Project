@@ -25,6 +25,14 @@
   },
   {
     "media": "image",
+    "case": "P4 hidden PNG file payload",
+    "expected": "Authentic",
+    "actual": "Authentic",
+    "match": "yes",
+    "note": "7,283 byte PNG embedded; bytes identical on extraction: True"
+  },
+  {
+    "media": "image",
     "case": "N1 media edited after signing",
     "expected": "Tampered",
     "actual": "Tampered",
@@ -85,7 +93,15 @@
     "expected": "refused",
     "actual": "refused",
     "match": "yes",
-    "note": "Payload needs 2,882,904 bits but this cover holds 1,440,000 at 1 LSB(s). Short by 1,442,904 bits."
+    "note": "Payload needs 2,883,352 bits but this cover holds 1,440,000 at 1 LSB(s). Short by 1,443,352 bits."
+  },
+  {
+    "media": "image",
+    "case": "N9 same stego file verified twice (replay)",
+    "expected": "Replay Detected",
+    "actual": "Replay Detected",
+    "match": "yes",
+    "note": "This exact payload (nonce 1c2d079f0a1abadbd805c331f2f24271) was already verified at 2026-09-17T08:53:07+00:00. A genuine sender does not resubmit the same signed file."
   },
   {
     "media": "audio",
@@ -110,6 +126,14 @@
     "actual": "Authentic",
     "match": "yes",
     "note": "message recovered: True"
+  },
+  {
+    "media": "audio",
+    "case": "P4 hidden PNG file payload",
+    "expected": "Authentic",
+    "actual": "Authentic",
+    "match": "yes",
+    "note": "7,283 byte PNG embedded; bytes identical on extraction: True"
   },
   {
     "media": "audio",
@@ -173,6 +197,14 @@
     "expected": "refused",
     "actual": "refused",
     "match": "yes",
-    "note": "Payload needs 884,904 bits but this cover holds 441,000 at 1 LSB(s). Short by 443,904 bits."
+    "note": "Payload needs 885,352 bits but this cover holds 441,000 at 1 LSB(s). Short by 444,352 bits."
+  },
+  {
+    "media": "audio",
+    "case": "N9 same stego file verified twice (replay)",
+    "expected": "Replay Detected",
+    "actual": "Replay Detected",
+    "match": "yes",
+    "note": "This exact payload (nonce 97ae04c1294dfd1bf106ca9e127b9152) was already verified at 2026-09-17T08:53:07+00:00. A genuine sender does not resubmit the same signed file."
   }
 ]
