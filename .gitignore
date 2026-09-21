@@ -1,6 +1,8 @@
 __pycache__/
 *.pyc
 .venv/
+venv/
+stego_env/
 .DS_Store
 .streamlit/secrets.toml
 .streamlit/secrets.toml.bak
