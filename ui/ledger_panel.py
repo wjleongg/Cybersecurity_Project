@@ -87,6 +87,8 @@ def contradiction_banner(verdict: Verdict, result) -> None:
 
 def render_panel() -> None:
     """The ledger tab: connection state, revocation, and recent activity."""
+    from ui import auth  # Add this import at the top of the file
+    
     ledger = get_ledger()
 
     if not ledger.enabled:
@@ -118,11 +120,23 @@ def render_panel() -> None:
         icon=":material/database:",
     )
 
+    st.divider()
     st.markdown("**Revoke a record**")
     st.caption(
         "Withdraws a media ID the issuer no longer stands behind. The file "
         "stays cryptographically valid; the ledger is what changes."
     )
+    
+    # Require authentication before showing revoke controls
+    if not auth.require_admin_password():
+        st.warning(
+            "You must authenticate to access revocation. This protects the "
+            "ledger from unauthorized changes.",
+            icon=":material/lock:",
+        )
+        return
+    
+    # Only authenticated users see and can use the revoke button
     c1, c2, c3 = st.columns([2, 2, 1])
     with c1:
         media_id = st.text_input(
@@ -145,6 +159,11 @@ def render_panel() -> None:
                 else:
                     st.warning(result.message)
                 st.rerun()
+
+    if st.session_state.get("admin_authenticated"):
+        if st.button("Logout", use_container_width=True):
+            auth.logout()
+            st.rerun()
 
     st.divider()
 
