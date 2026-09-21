@@ -190,6 +190,7 @@ def encode(
     n_lsb: int,
     stego_key: str,
     private_key,
+    seed: str = "",
     start_mode: str = "derived",
     manual_offset: int | None = None,
     passphrase: str | None = None,
@@ -234,7 +235,7 @@ def encode(
     )
 
     blob = container.build(
-        magic=location.derive_magic(stego_key),
+        magic=location.derive_magic(stego_key, seed),
         payload=payload_bytes,
         signature=signature,
         encrypted=record.content_encrypted,
@@ -257,6 +258,7 @@ def encode(
         n_lsb=n_lsb,
         manual_offset=manual_offset,
         frame_count=getattr(cover, "frame_count", None),
+        seed=seed,
     )
 
     stego = bitops.embed_bits(
@@ -300,6 +302,7 @@ def verify(
     n_lsb: int,
     stego_key: str,
     public_key,
+    seed: str = "",
     start_mode: str = "derived",
     manual_offset: int | None = None,
     passphrase: str | None = None,
@@ -336,7 +339,7 @@ def verify(
             checks=checks,
         )
 
-    magic = location.derive_magic(stego_key)
+    magic = location.derive_magic(stego_key, seed)
 
     try:
         start = location.resolve_start(
@@ -347,6 +350,7 @@ def verify(
             n_lsb=n_lsb,
             manual_offset=manual_offset,
             frame_count=getattr(cover, "frame_count", None),
+            seed=seed,
         )
     except ValueError as exc:
         return VerifyResult(
