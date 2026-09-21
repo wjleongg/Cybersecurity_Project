@@ -201,7 +201,17 @@ def _encode_section(adapter: MediaAdapter, media: str) -> None:
             passphrase = st.text_input(
                 "Payload passphrase", type="password", key=f"{media}_enc_pass"
             )
-
+        # Seed phrase for variable start location
+        seed_phrase_enc = st.text_input(
+            "Seed phrase",
+            value="",
+            key=f"{media}_enc_seed",
+            placeholder="Leave empty for no seed",
+            help=(
+                "Optional. Shared with verifier. Different seed = different start location. "
+                "Empty = original behaviour (backwards compatible)."
+            ),
+        )
         # ---- live capacity readout
         report = engine.estimate_capacity(
             cover, n_lsb, payload_data, encrypt, issuer, kind, filename
@@ -235,7 +245,7 @@ def _encode_section(adapter: MediaAdapter, media: str) -> None:
         else:
             _do_encode(
                 adapter, media, cover, n_lsb, payload_data, issuer, stego_key,
-                keypair, start_mode, manual_offset, passphrase, kind, filename,
+                keypair, start_mode, manual_offset, passphrase, kind, filename, seed_phrase_enc,
             )
 
     _render_encode_output(adapter, media, cover, cover_bytes)
@@ -243,7 +253,7 @@ def _encode_section(adapter: MediaAdapter, media: str) -> None:
 
 def _do_encode(
     adapter, media, cover, n_lsb, payload_data, issuer, stego_key,
-    keypair, start_mode, manual_offset, passphrase, kind, filename,
+    keypair, start_mode, manual_offset, passphrase, kind, filename, seed,
 ):
     """Run the embed and store the result in session state."""
     try:
@@ -255,6 +265,7 @@ def _do_encode(
             n_lsb=n_lsb,
             stego_key=stego_key,
             private_key=keypair.private_key,
+            seed = seed,
             start_mode=start_mode,
             manual_offset=int(manual_offset) if manual_offset is not None else None,
             passphrase=passphrase,
@@ -445,6 +456,17 @@ def _verify_section(adapter: MediaAdapter, media: str) -> None:
                     "marker is derived from it."
                 ),
             )
+            # Seed phrase for variable start location
+            seed_phrase_ver = st.text_input(
+                "Seed phrase used at embedding",
+                value="",
+                key=f"{media}_ver_seed",
+                placeholder="Leave empty if no seed was used",
+                help=(
+                    "Optional. Must match the seed used at embedding. "
+                    "Different seed = Wrong Start Location."
+                ),
+            )
 
         st.divider()
         rc1, rc2 = st.columns([2, 1])
@@ -484,6 +506,7 @@ def _verify_section(adapter: MediaAdapter, media: str) -> None:
             n_lsb=n_lsb,
             stego_key=st.session_state.get("stego_key", ""),
             public_key=st.session_state.get("public_key"),
+            seed=seed_phrase_ver,
             start_mode=start_mode,
             manual_offset=int(manual_offset) if manual_offset is not None else None,
             passphrase=passphrase or None,

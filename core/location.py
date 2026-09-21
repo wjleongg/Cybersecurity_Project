@@ -41,34 +41,35 @@ def _hmac(key: str, message: str) -> bytes:
     return hmac.new(key.encode("utf-8"), message.encode("utf-8"), hashlib.sha256).digest()
 
 
-def derive_magic(stego_key: str) -> bytes:
+def derive_magic(stego_key: str, seed: str = "") -> bytes:
     """Four-byte marker that identifies the start of a container.
 
-    Derived from the key, so the marker differs per key and cannot be scanned
-    for by someone who does not hold it.
+    Derived from the key and optional seed, so the marker differs per key and 
+    seed. With a seed, the same key produces different markers, preventing 
+    location prediction across files.
     """
-    return _hmac(stego_key, "magic-marker-v1")[:MAGIC_LEN]
+    material = f"magic-marker-v1|seed-{seed}"
+    return _hmac(stego_key, material)[:MAGIC_LEN]
 
 
-def derive_start(stego_key: str, media_type: str, num_carriers: int, n_lsb: int) -> int:
+def derive_start(stego_key: str, media_type: str, num_carriers: int, n_lsb: int, seed: str = "") -> int:
     """Compute the derived start carrier index.
 
-    Binding num_carriers and n_lsb into the HMAC input means the same key
-    produces a different location for a different cover object or a different
-    LSB setting, so observing two stego files carrying the same key does not
-    reveal a reusable offset.
+    Binding num_carriers, n_lsb, and optional seed into the HMAC input means 
+    the same key produces a different location for different seeds, cover objects, 
+    or LSB settings. This prevents location prediction across files.
     """
     if num_carriers <= 0:
         raise ValueError("cover object has no carriers")
-    material = f"{media_type}|{num_carriers}|{n_lsb}|start-v1"
+    material = f"{media_type}|{num_carriers}|{n_lsb}|seed-{seed}|start-v1"
     digest = _hmac(stego_key, material)
     return int.from_bytes(digest[:8], "big") % num_carriers
 
 
-def derive_frame_index(stego_key: str, media_type: str, frame_count: int, n_lsb: int) -> int:
+def derive_frame_index(stego_key: str, media_type: str, frame_count: int, n_lsb: int, seed: str = "") -> int:
     if frame_count <= 0:
         raise ValueError("cover object has no frames")
-    material = f"{media_type}|{frame_count}|{n_lsb}|frame-v1"
+    material = f"{media_type}|{frame_count}|{n_lsb}|seed-{seed}|frame-v1"
     digest = _hmac(stego_key, material)
     return int.from_bytes(digest[:8], "big") % frame_count
 
@@ -79,9 +80,10 @@ def derive_video_start(
     frame_count: int,
     per_frame_carriers: int,
     n_lsb: int,
+    seed: str = "",
 ) -> int:
-    frame_index = derive_frame_index(stego_key, media_type, frame_count, n_lsb)
-    offset_in_frame = derive_start(stego_key, media_type, per_frame_carriers, n_lsb)
+    frame_index = derive_frame_index(stego_key, media_type, frame_count, n_lsb, seed)
+    offset_in_frame = derive_start(stego_key, media_type, per_frame_carriers, n_lsb, seed)
     return frame_index * per_frame_carriers + offset_in_frame
 
 
@@ -93,14 +95,15 @@ def resolve_start(
     n_lsb: int,
     manual_offset: int | None = None,
     frame_count: int | None = None,
+    seed: str = "",
 ) -> int:
     if mode == "derived":
         if frame_count:
             per_frame_carriers = num_carriers // frame_count
             return derive_video_start(
-                stego_key, media_type, frame_count, per_frame_carriers, n_lsb
+                stego_key, media_type, frame_count, per_frame_carriers, n_lsb, seed
             )
-        return derive_start(stego_key, media_type, num_carriers, n_lsb)
+        return derive_start(stego_key, media_type, num_carriers, n_lsb, seed)
     if mode == "manual":
         if manual_offset is None:
             raise ValueError("manual mode requires an offset")
@@ -119,13 +122,12 @@ def scan_for_magic(
     limit: int = 1,
 ) -> list[int]:
     """Search every carrier offset for the keyed magic marker.
-
+    
     Used only as a diagnostic, to tell "the payload is somewhere else" apart
-    from "there is no payload here at all". That distinction is what lets the
-    verifier report Wrong Start Location rather than Payload Missing.
-
-    Requires the stego key, since the marker is keyed. Returns up to `limit`
-    matching offsets.
+    from "there is no payload here at all". The magic marker is keyed to the
+    stego key and seed, so only a key/seed holder can scan for it.
+    
+    Returns up to `limit` matching offsets.
     """
     total = len(carriers)
     if total == 0:
