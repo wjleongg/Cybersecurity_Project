@@ -202,6 +202,16 @@ def _encode_section(adapter: MediaAdapter, media: str) -> None:
                 )
             kind = payload_mod.KIND_FILE
 
+        robust_mode = st.checkbox(
+            "Robust mode (repetition coding)",
+            value=False,
+            key=f"{media}_robust_mode",
+            help=(
+                "Adds a simple repetition-coded wrapper around the signed payload so "
+                "mild bit-flip corruption can be corrected before signature checks. "
+                "The baseline payload path remains unchanged when this is off."
+            ),
+        )
         encrypt = st.checkbox(
             "Encrypt the payload (AES-256-GCM)",
             key=f"{media}_encrypt",
@@ -218,7 +228,7 @@ def _encode_section(adapter: MediaAdapter, media: str) -> None:
 
         # ---- live capacity readout
         report = engine.estimate_capacity(
-            cover, n_lsb, payload_data, encrypt, issuer, kind, filename
+            cover, n_lsb, payload_data, encrypt, issuer, kind, filename, robust_mode=robust_mode
         )
         components.capacity_meter(report)
 
@@ -249,7 +259,8 @@ def _encode_section(adapter: MediaAdapter, media: str) -> None:
         else:
             _do_encode(
                 adapter, media, cover, n_lsb, payload_data, issuer, stego_key,
-                keypair, start_mode, manual_offset, passphrase, kind, filename, seed_phrase_enc,
+                keypair, start_mode, manual_offset, passphrase, kind, filename,
+                seed_phrase_enc, robust_mode,
             )
 
     _render_encode_output(adapter, media, cover, cover_bytes)
@@ -258,6 +269,7 @@ def _encode_section(adapter: MediaAdapter, media: str) -> None:
 def _do_encode(
     adapter, media, cover, n_lsb, payload_data, issuer, stego_key,
     keypair, start_mode, manual_offset, passphrase, kind, filename, seed,
+    robust_mode: bool = False,
 ):
     """Run the embed and store the result in session state."""
     try:
@@ -275,6 +287,7 @@ def _do_encode(
             passphrase=passphrase,
             kind=kind,
             filename=filename,
+            robust_mode=robust_mode,
         )
     except engine.EncodeError as exc:
         st.error(str(exc), icon=":material/error:")
@@ -428,6 +441,15 @@ def _verify_section(adapter: MediaAdapter, media: str) -> None:
             n_lsb = st.slider(
                 "LSB depth used at embedding", 1, 8, 2, key=f"{media}_ver_lsb"
             )
+            robust_mode = st.checkbox(
+                "Robust decode before verification",
+                value=False,
+                key=f"{media}_ver_robust_mode",
+                help=(
+                    "Attempts to recover a repetition-coded payload before the usual "
+                    "hash/signature verification runs. This is the optional error-correction layer."
+                ),
+            )
             passphrase = st.text_input(
                 "Payload passphrase (if encrypted)",
                 type="password",
@@ -518,6 +540,7 @@ def _verify_section(adapter: MediaAdapter, media: str) -> None:
             max_age_seconds=(
                 int(max_age_minutes) * 60 if max_age_minutes is not None else None
             ),
+            robust_mode=robust_mode,
         )
         state.put(media, "verify_result", result)
 

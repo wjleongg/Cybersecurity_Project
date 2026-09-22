@@ -202,6 +202,26 @@ payload, so it verifies without the passphrase. Encryption protects only the
 message field. A recipient without the passphrase can still confirm the file
 is authentic and untampered; they simply cannot read the message.
 
+**Robust payload transport (assignment innovation).** This project also adds an
+opt-in repetition-based redundancy layer for the hidden payload. The design is
+kept intentionally simple and explainable: each payload bit is repeated three
+times, and the decoder applies a majority vote to recover the original bit if a
+few LSB flips happened during transmission or storage. The addition is handled
+in `core/robust_codec.py`, and it wraps the exact payload bytes that are already
+signed by the project, so the normal authenticity model stays intact while the
+carrier becomes more tolerant to mild corruption.
+
+The robust wrapper includes a magic marker (`RLC1`), a codec type, the original
+payload length, and a CRC32 checksum, making the format self-identifying and
+resistant to accidental truncation. Encoding uses the same container structure as
+before, but the payload length is based on the repeated form, so capacity checks
+and the container-size logic both account for the redundancy. The verifier runs
+`robust_codec.decode()` before the usual signature and hash checks whenever the
+robust option is enabled, which is exactly the “robust embedding innovation” a
+steganalysis assignment asks for: a familiar LSB baseline remains available, and
+an optional error-correction layer can recover from minor corruption without
+changing the rest of the system.
+
 **Replay/substitution detection (innovation).** A valid signature and a
 matching hash prove a payload is genuine and unaltered — neither says whether
 this exact file has been presented before, or how long ago it was issued. An

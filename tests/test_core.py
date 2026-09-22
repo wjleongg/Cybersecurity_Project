@@ -12,7 +12,7 @@ from PIL import Image
 
 sys.path.insert(0, ".")
 
-from core import attacks, audio_stego, crypto_utils, engine, image_stego, location, video_stego
+from core import attacks, audio_stego, crypto_utils, engine, image_stego, location, robust_codec, video_stego
 from core import payload as pm
 from core.engine import Verdict
 from core.replay_guard import ReplayGuard
@@ -262,6 +262,64 @@ def run_media(label, load_fn, cover_bytes, rebuild_attr, media_type, attack_set)
         check(f"{label}: oversized payload refused", True)
 
 
+def run_robust_tests():
+    """Exercise the optional repetition-coded transmission layer."""
+    print("\n=== robust mode ===")
+    kp = crypto_utils.generate_keypair()
+    cover = image_stego.load_image(make_png())
+
+    baseline = engine.encode(
+        cover, "image", SHORT_MSG.encode(), "Team P1-4", 2, STEGO_KEY, kp.private_key,
+        robust_mode=False,
+    )
+    baseline_bytes = cover.to_png_bytes(baseline.stego_carriers)
+    baseline_verify = engine.verify(
+        image_stego.load_image(baseline_bytes), "image", 2, STEGO_KEY, kp.public_key,
+        robust_mode=False,
+    )
+    check("robust: baseline LSB success", baseline_verify.verdict == Verdict.AUTHENTIC)
+
+    robust = engine.encode(
+        cover, "image", SHORT_MSG.encode(), "Team P1-4", 2, STEGO_KEY, kp.private_key,
+        robust_mode=True,
+    )
+    robust_bytes = cover.to_png_bytes(robust.stego_carriers)
+    robust_verify = engine.verify(
+        image_stego.load_image(robust_bytes), "image", 2, STEGO_KEY, kp.public_key,
+        robust_mode=True,
+    )
+    check("robust: robust mode success", robust_verify.verdict == Verdict.AUTHENTIC)
+
+    mild = robust_codec.flip_lsb_bits(robust.stego_carriers.copy(), 8, seed=12)
+    mild_verify = engine.verify(
+        image_stego.load_image(cover.to_png_bytes(mild)), "image", 2, STEGO_KEY, kp.public_key,
+        robust_mode=True,
+    )
+    check("robust: mild corruption still authentic", mild_verify.verdict == Verdict.AUTHENTIC)
+
+    heavy = robust_codec.flip_lsb_bits(robust.stego_carriers.copy(), 300, seed=17)
+    heavy_verify = engine.verify(
+        image_stego.load_image(cover.to_png_bytes(heavy)), "image", 2, STEGO_KEY, kp.public_key,
+        robust_mode=True,
+    )
+    check(
+        "robust: heavy corruption fails gracefully",
+        heavy_verify.verdict != Verdict.AUTHENTIC,
+        heavy_verify.verdict,
+    )
+
+    audio_cover = audio_stego.load_audio(make_wav())
+    audio_robust = engine.encode(
+        audio_cover, "audio", SHORT_MSG.encode(), "Team P1-4", 2, STEGO_KEY, kp.private_key,
+        robust_mode=True,
+    )
+    audio_steg = audio_stego.load_audio(audio_cover.to_wav_bytes(audio_robust.stego_carriers))
+    audio_verify = engine.verify(
+        audio_steg, "audio", 2, STEGO_KEY, kp.public_key, robust_mode=True,
+    )
+    check("robust: audio robust round trip", audio_verify.verdict == Verdict.AUTHENTIC)
+
+
 def run_replay_tests():
     """Replay/substitution detection is opt-in: no guard, no change in
     behaviour; a guard turns nonce reuse and staleness into a new verdict,
@@ -427,6 +485,7 @@ def main():
         ) == start1,
     )
 
+    run_robust_tests()
     run_replay_tests()
 
     print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")

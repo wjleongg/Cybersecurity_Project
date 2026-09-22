@@ -29,7 +29,7 @@ from typing import Any
 
 import numpy as np
 
-from . import bitops, container, crypto_utils, location, payload as payload_mod
+from . import bitops, container, crypto_utils, location, payload as payload_mod, robust_codec
 from .replay_guard import ReplayGuard
 
 
@@ -135,6 +135,7 @@ def estimate_capacity(
     issuer: str = "Team P1-4",
     kind: str = payload_mod.KIND_TEXT,
     filename: str = "",
+    robust_mode: bool = False,
 ) -> CapacityReport:
     """Estimate whether a payload will fit, before doing any work.
 
@@ -169,6 +170,8 @@ def estimate_capacity(
         content_encrypted=encrypted,
     )
     payload_bytes = probe.to_json()
+    if robust_mode:
+        payload_bytes = robust_codec.encode(payload_bytes)
     total = container.total_size(len(payload_bytes))
     return CapacityReport(
         payload_bits=total * 8,
@@ -197,6 +200,7 @@ def encode(
     kind: str = payload_mod.KIND_TEXT,
     filename: str = "",
     mime: str | None = None,
+    robust_mode: bool = False,
 ) -> EncodeResult:
     """Hash, build, sign and embed. Returns the modified carriers.
 
@@ -224,7 +228,6 @@ def encode(
         passphrase=passphrase,
     )
     payload_bytes = record.to_json()
-
     signature = crypto_utils.sign(
         private_key,
         container.signed_region(
@@ -234,9 +237,11 @@ def encode(
         ),
     )
 
+    payload_to_embed = robust_codec.encode(payload_bytes) if robust_mode else payload_bytes
+
     blob = container.build(
         magic=location.derive_magic(stego_key, seed),
-        payload=payload_bytes,
+        payload=payload_to_embed,
         signature=signature,
         encrypted=record.content_encrypted,
     )
@@ -309,6 +314,7 @@ def verify(
     scan_on_miss: bool = True,
     replay_guard: ReplayGuard | None = None,
     max_age_seconds: int | None = None,
+    robust_mode: bool = False,
 ) -> VerifyResult:
     """Locate, extract, authenticate and return a verdict.
 
@@ -404,9 +410,30 @@ def verify(
     checks["Payload size"] = f"{len(parsed.payload):,} bytes"
     checks["Content encrypted"] = parsed.is_encrypted
 
+    payload_to_verify = parsed.payload
+    if robust_mode:
+        if parsed.payload.startswith(robust_codec.MAGIC):
+            try:
+                payload_to_verify = robust_codec.decode(parsed.payload)
+                checks["Robust codec"] = "decoded before signature check"
+            except robust_codec.RobustCodecError as exc:
+                return VerifyResult(
+                    verdict=Verdict.CANNOT_VERIFY,
+                    reason=f"The robust layer could not decode the payload: {exc}",
+                    checks={**checks, "Robust codec": f"decode failed ({exc})"},
+                    start_index=start,
+                    found_at=found_at,
+                )
+        else:
+            checks["Robust codec"] = "not present (baseline payload)"
+    else:
+        checks["Robust codec"] = "disabled"
+
+    parsed.payload = payload_to_verify
+
     # Step 2: does the signature hold?
     sig_ok = crypto_utils.verify_signature(
-        public_key, parsed.signature, parsed.signed_bytes()
+        public_key, parsed.signature, container.signed_region(parsed.version, parsed.flags, payload_to_verify)
     )
     checks["Signature"] = "valid" if sig_ok else "INVALID"
     if not sig_ok:
