@@ -14,9 +14,10 @@ for a marker to find.
 from dataclasses import dataclass
 from typing import Callable
 
+
 import streamlit as st
 
-from core import crypto_utils, engine, payload as payload_mod
+from core import crypto_utils, engine, payload as payload_mod, steganalysis
 from ui import components, ledger_panel, messages, state
 
 
@@ -48,6 +49,9 @@ def render(adapter: MediaAdapter) -> None:
     _attack_section(adapter, media)
     st.divider()
     _verify_section(adapter, media)
+    st.divider()
+    _steganalysis_section(adapter, media)
+
 
 
 # --------------------------------------------------------------------------
@@ -552,3 +556,189 @@ def _render_verify_output(adapter: MediaAdapter, media: str, verify_bytes: bytes
 
     with st.expander("Verification trail", expanded=False):
         components.checks_table(result)
+# --------------------------------------------------------------------------
+# Steganalysis (no key required)
+# --------------------------------------------------------------------------
+#
+# Unlike _verify_section above, nothing here needs the stego key, the
+# signing keys, or the payload. It only looks at the carrier values
+# themselves -- what an eavesdropper without the key could still infer. It
+# reuses the file already uploaded to Verify, since a real analyst starts
+# from the same suspect file they were trying to verify, not a fresh upload.
+
+_SA_TONE = {
+    steganalysis.Likelihood.LIKELY_CLEAN: "success",
+    steganalysis.Likelihood.SUSPICIOUS: "warning",
+    steganalysis.Likelihood.LIKELY_STEGO: "error",
+    steganalysis.Likelihood.INCONCLUSIVE: "warning",
+}
+
+
+def _steganalysis_section(adapter: MediaAdapter, media: str) -> None:
+    components.section_label("STEGANALYSIS")
+
+    verify_bytes = state.get(media, "verify_bytes")
+    if verify_bytes is None:
+        st.caption(
+            "Upload a file in the Verify section above, then run a scan here. "
+            "This works without the stego key or signing keys -- it only "
+            "looks at the carrier values themselves."
+        )
+        return
+
+    try:
+        subject = adapter.load(verify_bytes)
+    except adapter.format_error as exc:
+        st.error(str(exc), icon=":material/error:")
+        return
+
+    cover_bytes = state.get(media, "cover_bytes")
+    cover = None
+    if cover_bytes is not None:
+        try:
+            cover = adapter.load(cover_bytes)
+        except adapter.format_error:
+            cover = None
+
+    with st.container(border=True):
+        c1, c2, c3 = st.columns([2, 2, 1])
+        with c1:
+            n_lsb = st.slider(
+                "LSB depth to test", 1, 8, 2, key=f"{media}_sa_lsb",
+                help="Try the depth actually used at embedding first; a mismatch weakens the test.",
+            )
+        with c2:
+            window = st.select_slider(
+                "Window size (carriers)",
+                options=[500, 1000, 2000, 5000, 10000, 20000],
+                value=2000,
+                key=f"{media}_sa_window",
+                help=(
+                    "Smaller windows localise a small payload better; larger "
+                    "windows have more statistical power for a large one. "
+                    "Unsure which fits? Use the sweep button below instead."
+                ),
+            )
+        with c3:
+            st.write("")
+            st.write("")
+            run = st.button("Run scan", key=f"{media}_sa_run", width="stretch")
+
+        sweep = st.button(
+            "Sweep window sizes instead (needs the cover file)",
+            key=f"{media}_sa_sweep",
+            width="stretch",
+            help="Tries several window sizes and reports whichever one shows the clearest shift, instead of using the single size chosen above.",
+        )
+
+    if run:
+        scan = steganalysis.chi_square_scan(subject.carriers, n_lsb=n_lsb, window_carriers=window)
+        state.put(media, "sa_scan", scan)
+        state.put(media, "sa_lsb", n_lsb)
+        if cover is not None:
+            cover_scan = steganalysis.chi_square_scan(cover.carriers, n_lsb=n_lsb, window_carriers=window)
+            state.put(media, "sa_cover_scan", cover_scan)
+            state.put(media, "sa_compare", steganalysis.compare_scans(cover_scan, scan))
+        else:
+            state.put(media, "sa_cover_scan", None)
+            state.put(media, "sa_compare", None)
+        state.put(media, "sa_sweep_result", None)
+
+    if sweep:
+        if cover is None:
+            st.warning(
+                "The sweep needs the cover file loaded in the Encode section above.",
+                icon=":material/error:",
+            )
+        else:
+            result = steganalysis.multiscale_compare(cover.carriers, subject.carriers, n_lsb=n_lsb)
+            state.put(media, "sa_sweep_result", result)
+            state.put(media, "sa_lsb", n_lsb)
+
+    scan = state.get(media, "sa_scan")
+    sweep_result = state.get(media, "sa_sweep_result")
+
+    if scan is None and sweep_result is None:
+        return
+
+    if scan is not None:
+        tone = _SA_TONE[scan.likelihood]
+        message = f"**{scan.likelihood.value}** — {scan.summary}"
+        {"success": st.success, "warning": st.warning, "error": st.error}[tone](
+            message, icon=":material/query_stats:"
+        )
+
+        
+        if scan.windows:
+            st.caption(
+                "z-score by window (lower = more statistically uniform = more "
+                "consistent with embedding). Shown instead of raw p-values, "
+                "which underflow to 0 on real photographic images and audio "
+                "and would otherwise show as an empty chart."
+            )
+            st.bar_chart({"z-score": [w.z_score for w in scan.windows]}, height=140)
+
+        with st.expander("Raw p-values by window", expanded=False):
+            st.caption(
+                "Shown as a table, not a chart, because on real files these "
+                "numbers collapse to 0.0 for almost every window and a chart "
+                "of them looks empty."
+            )
+            st.dataframe(
+                [
+                    {"window": i, "start": w.start, "end": w.end, "p_value": w.p_value, "z_score": w.z_score}
+                    for i, w in enumerate(scan.windows)
+                ],
+                hide_index=True,
+                width="stretch",
+            )
+
+        compare_text = state.get(media, "sa_compare")
+        if compare_text:
+            st.info(compare_text, icon=":material/compare_arrows:")
+        elif cover is None:
+            st.caption(
+                "No cover file loaded in the Encode section above -- showing "
+                "the single-file result only, which is the realistic case "
+                "for a detector that never sees the original."
+            )
+
+    if sweep_result:
+        st.info(f"Sweep result: {sweep_result}", icon=":material/search:")
+
+    used_lsb = state.get(media, "sa_lsb") or n_lsb
+    with st.expander("Bit-plane comparison", expanded=scan is not None):
+        st.caption(
+            f"Bit {used_lsb - 1} (0 = least significant) extracted as its own "
+            "image/waveform. A plane carrying real payload data looks like "
+            "noise; an unmodified plane keeps a visible trace of the cover."
+        )
+        bit_index = st.slider(
+            "Which bit to show", 0, 7, min(used_lsb - 1, 7), key=f"{media}_sa_bit",
+        )
+
+        cols = st.columns(2) if cover is not None else st.columns(1)
+
+        if media == "image":
+            if cover is not None:
+                with cols[0]:
+                    st.image(steganalysis.bit_plane_image(cover, bit_index=bit_index), caption="Cover", width="stretch")
+                with cols[1]:
+                    st.image(steganalysis.bit_plane_image(subject, bit_index=bit_index), caption="Subject", width="stretch")
+            else:
+                with cols[0]:
+                    st.image(steganalysis.bit_plane_image(subject, bit_index=bit_index), caption="Subject", width="stretch")
+        elif media == "audio":
+            if cover is not None:
+                with cols[0]:
+                    st.caption("Cover")
+                    st.line_chart(steganalysis.bit_plane_waveform(cover, bit_index=bit_index)[:20000])
+                with cols[1]:
+                    st.caption("Subject")
+                    st.line_chart(steganalysis.bit_plane_waveform(subject, bit_index=bit_index)[:20000])
+            else:
+                with cols[0]:
+                    st.caption("Subject")
+                    st.line_chart(steganalysis.bit_plane_waveform(subject, bit_index=bit_index)[:20000])
+        else:
+            st.caption("Bit-plane visualisation is defined for image and audio carriers only.")
