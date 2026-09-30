@@ -16,6 +16,13 @@ import streamlit as st
 from core.ledger import LedgerConfig, LedgerStatus, build_ledger
 from core.engine import Verdict
 
+# Verdicts where signature and hash both passed, so the ledger's opinion is
+# still meaningful to show alongside them. Replay Detected still means the
+# payload is genuine and unaltered — it was just already seen before — so a
+# revoked/substituted identity is just as relevant there as it is for
+# Authentic.
+CRYPTO_CLEAN_VERDICTS = {Verdict.AUTHENTIC, Verdict.REPLAY_DETECTED}
+
 _STATUS_STYLE = {
     LedgerStatus.REGISTERED: ("#0F6E56", "#E1F5EE"),
     LedgerStatus.UNKNOWN: ("#854F0B", "#FAEEDA"),
@@ -74,8 +81,14 @@ def contradiction_banner(verdict: Verdict, result) -> None:
     A file can be perfectly signed, perfectly intact, and still not something
     the issuer stands behind any more. That gap is the entire argument for
     keeping state, so it gets its own banner rather than a quiet line.
+
+    "Clean" includes Replay Detected, not just Authentic: that verdict still
+    means signature and hash both passed, so a revoked or reused identity is
+    just as worth surfacing there. Without this, revoking a record and
+    re-verifying the same file a second time (which trips replay detection
+    on its own) would silently hide the revocation.
     """
-    if verdict != Verdict.AUTHENTIC or not result.is_blocking:
+    if verdict not in CRYPTO_CLEAN_VERDICTS or not result.is_blocking:
         return
     st.error(
         "The cryptography checks out but the ledger says do not trust this file. "

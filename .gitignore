@@ -13,3 +13,6 @@ keys/*private*.pem
 
 # Runtime replay-detection log, not source.
 replay_log.json
+
+# Demo-day planning docs (runbook, demo plan) — not source, not for the repo.
+demo/
