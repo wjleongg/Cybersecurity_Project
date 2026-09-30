@@ -528,6 +528,52 @@ def compare_scans(cover_scan: ScanResult, subject_scan: ScanResult) -> str:
         "sits, using only the statistical shift -- no stego key needed."
     )
 
+def multiscale_compare(
+    cover_carriers: np.ndarray,
+    subject_carriers: np.ndarray,
+    n_lsb: int = 1,
+    window_sizes: tuple = (1000, 2000, 5000, 10000, 20000),
+) -> str:
+    """Try several window sizes and report whichever shows the clearest shift.
+
+    A single window_carriers choice is a real limitation of chi_square_scan:
+    too coarse and a small payload dilutes into invisibility, too fine and
+    the test loses statistical power. Rather than ask the user to guess,
+    this runs the same cover-vs-subject comparison at several sizes and
+    surfaces the one that actually finds something -- the practical answer
+    to "I don't know what window size fits this file".
+    """
+    best = None
+    for ws in window_sizes:
+        cover_scan = chi_square_scan(cover_carriers, n_lsb=n_lsb, window_carriers=ws)
+        subject_scan = chi_square_scan(subject_carriers, n_lsb=n_lsb, window_carriers=ws)
+        if not cover_scan.windows or not subject_scan.windows:
+            continue
+
+        n = min(len(cover_scan.windows), len(subject_scan.windows))
+        shifted = sum(
+            1 for i in range(n)
+            if cover_scan.windows[i].z_score - subject_scan.windows[i].z_score >= 1.0
+        )
+        if best is None or shifted > best[1]:
+            best = (ws, shifted, cover_scan, subject_scan)
+
+    if best is None:
+        return (
+            f"None of the tried window sizes {list(window_sizes)} produced a "
+            "valid chi-square test on this file pair -- the file may be too "
+            "small, or too few carriers survive the >=5-per-bin validity rule."
+        )
+
+    ws, shifted, cover_scan, subject_scan = best
+    if shifted == 0:
+        return (
+            f"Tried window sizes {list(window_sizes)}; none showed a shift "
+            "consistent with embedding at this LSB depth."
+        )
+
+    return f"Best window size {ws:,} carriers -- {compare_scans(cover_scan, subject_scan)}"
+
 
 def analyze(
     cover,
