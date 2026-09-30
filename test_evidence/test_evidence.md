@@ -5,8 +5,8 @@ by running the same engine the GUI calls.
 
 - Stego key: `inf2005-p1-4-shared-stego-key`
 - Message passphrase (encrypted cases): `confidential-demo-passphrase`
-- Demo public key fingerprint: `8f:59:e4:5f:c1:eb:fd:12`
-- Other-party public key fingerprint: `f2:6e:c3:97:3a:5c:0b:b0`
+- Demo public key fingerprint: `5a:ec:38:09:dc:0e:11:9c`
+- Other-party public key fingerprint: `27:73:74:aa:d7:57:f8:90`
 
 ## Cover object statistics, positive case at 2 LSB
 
@@ -14,10 +14,10 @@ by running the same engine the GUI calls.
 | --- | --- | --- | --- |
 | Carriers | 1,440,000 | 441,000 | 216,000 |
 | Container size | 524 bytes | 524 bytes | 524 bytes |
-| Derived start carrier | 38,421 | 343,888 | 98,729 |
-| Carriers changed | 1,583 (0.11%) | 1,584 (0.359%) | 1,582 (0.732%) |
+| Derived start carrier | 197,959 | 168,342 | 194,932 |
+| Carriers changed | 1,548 (0.107%) | 1,567 (0.355%) | 1,629 (0.754%) |
 | Max delta | 3 | 3 | 3 |
-| Quality | PSNR 72.5 dB | SNR 93.6 dB | PSNR 64.8 dB |
+| Quality | PSNR 73.0 dB | SNR 93.7 dB | PSNR 64.2 dB |
 
 ## Cases
 
@@ -77,7 +77,7 @@ by running the same engine the GUI calls.
 - **image / N6 embedded manually, verified with derived offset** — embedded at carrier 50,000
 - **image / N7 wrong LSB depth at verification** — No container for this stego key was found anywhere in the file. Either nothing was embedded, the stego key is wrong, or the LSB depth does not match the one used at embedding.
 - **image / N8 payload larger than capacity** — Payload needs 2,883,352 bits but this cover holds 1,440,000 at 1 LSB(s). Short by 1,443,352 bits.
-- **image / N9 same stego file verified twice (replay)** — This exact payload (nonce 89f822aa09fee16faff1cf02ef76dcd6) was already verified at 2026-09-17T10:18:38+00:00. A genuine sender does not resubmit the same signed file.
+- **image / N9 same stego file verified twice (replay)** — This exact payload (nonce a262da486bcdf8a1c28ee16146ea5918) was already verified at 2026-09-30T03:40:49+00:00. A genuine sender does not resubmit the same signed file.
 - **audio / P1 short payload, derived location** — Signature verified against the loaded public key and the media hash matches the signed value. This file is intact and was issued by the holder of the corresponding private key.
 - **audio / P2 large payload at 3 LSB** — Signature verified against the loaded public key and the media hash matches the signed value. This file is intact and was issued by the holder of the corresponding private key.
 - **audio / P3 encrypted custom payload** — message recovered: True
@@ -90,7 +90,7 @@ by running the same engine the GUI calls.
 - **audio / N6 embedded manually, verified with derived offset** — embedded at carrier 50,000
 - **audio / N7 wrong LSB depth at verification** — No container for this stego key was found anywhere in the file. Either nothing was embedded, the stego key is wrong, or the LSB depth does not match the one used at embedding.
 - **audio / N8 payload larger than capacity** — Payload needs 885,352 bits but this cover holds 441,000 at 1 LSB(s). Short by 444,352 bits.
-- **audio / N9 same stego file verified twice (replay)** — This exact payload (nonce 06d304037d8602286055d2db22938762) was already verified at 2026-09-17T10:18:39+00:00. A genuine sender does not resubmit the same signed file.
+- **audio / N9 same stego file verified twice (replay)** — This exact payload (nonce e2c1117e4843e9a4d62ed91e8013b84e) was already verified at 2026-09-30T03:40:49+00:00. A genuine sender does not resubmit the same signed file.
 - **video / P1 short payload, derived location** — Signature verified against the loaded public key and the media hash matches the signed value. This file is intact and was issued by the holder of the corresponding private key.
 - **video / P2 large payload at 3 LSB** — Signature verified against the loaded public key and the media hash matches the signed value. This file is intact and was issued by the holder of the corresponding private key.
 - **video / P3 encrypted custom payload** — message recovered: True
@@ -103,4 +103,4 @@ by running the same engine the GUI calls.
 - **video / N6 embedded manually, verified with derived offset** — embedded at carrier 50,000
 - **video / N7 wrong LSB depth at verification** — No container for this stego key was found anywhere in the file. Either nothing was embedded, the stego key is wrong, or the LSB depth does not match the one used at embedding.
 - **video / N8 payload larger than capacity** — Payload needs 435,352 bits but this cover holds 216,000 at 1 LSB(s). Short by 219,352 bits.
-- **video / N9 same stego file verified twice (replay)** — This exact payload (nonce eb3e9e0984444a19b75f3cd1ae32a0d3) was already verified at 2026-09-17T10:18:39+00:00. A genuine sender does not resubmit the same signed file.
+- **video / N9 same stego file verified twice (replay)** — This exact payload (nonce 9177bb4523437120203cc1c59b325495) was already verified at 2026-09-30T03:40:50+00:00. A genuine sender does not resubmit the same signed file.
