@@ -19,7 +19,7 @@ from ui import state
 def render() -> None:
     """Draw the key panel and update session state in place."""
     with st.container(border=True):
-        st.markdown("**Signing keys** — shared by both tabs")
+        st.markdown("**Signing keys**")
 
         col_gen, col_priv, col_pub = st.columns(3)
 
