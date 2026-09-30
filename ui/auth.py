@@ -23,7 +23,7 @@ def require_admin_password() -> bool:
     if submitted:
         # In a real app, this would be read from environment variables or secrets
         # For the demo, you can set it in .streamlit/secrets.toml
-        correct_password = st.secrets.get("admin_password", "demo-password-change-me")
+        correct_password = st.secrets.get("admin", {}).get("password", "demo-password-change-me")
         
         if password == correct_password:
             st.session_state["admin_authenticated"] = True
